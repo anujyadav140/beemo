@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "WebFetch(domain:www.figma.com)",
+      "mcp__figma-dev-mode-mcp-server__get_design_context",
+      "mcp__figma-dev-mode-mcp-server__get_screenshot",
+      "Bash(tree:*)",
+      "mcp__figma-mcp__get_screenshot",
+      "mcp__figma-mcp__get_metadata",
+      "Bash(flutter pub get:*)",
+      "Read(//c/**)",
+      "Bash(flutter run)",
+      "Bash(nc:*)",
+      "mcp__figma-mcp__get_design_context",
+      "Bash(flutterfire:*)",
+      "Bash(dart pub global activate:*)",
+      "Bash($APPDATA\\Pub\\Cache\\bin\\flutterfire configure --project=beemo-household-app)",
+      "Bash(\"%APPDATA%\\Pub\\Cache\\bin\\flutterfire.bat\" configure --project=beemo-household-app)",
+      "Bash(C:/Users/ariaa/AppData/Local/Pub/Cache/bin/flutterfire.bat configure --project=beemo-household-app)",
+      "Bash(C:/Users/ariaa/AppData/Local/Pub/Cache/bin/flutterfire.bat configure)",
+      "Bash(keytool:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

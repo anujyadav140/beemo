@@ -46,9 +46,9 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.science_outlined),
-              activeIcon: Icon(Icons.science),
-              label: 'The Lab',
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
+              label: 'Home',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.note_outlined),

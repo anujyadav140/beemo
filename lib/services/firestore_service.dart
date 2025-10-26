@@ -133,6 +133,132 @@ class FirestoreService {
     );
   }
 
+  /// Get house members for AI analysis
+  Future<List<Map<String, String>>> getHouseMembers(String houseId) async {
+    try {
+      DocumentSnapshot houseDoc = await _firestore.collection('houses').doc(houseId).get();
+      if (!houseDoc.exists) return [];
+
+      Map<String, dynamic> houseData = houseDoc.data() as Map<String, dynamic>;
+      var membersData = houseData['members'];
+
+      List<Map<String, String>> membersList = [];
+
+      // Handle both Map and List formats
+      if (membersData is Map<String, dynamic>) {
+        // Map format: {userId: {name: "John", role: "admin"}}
+        membersData.forEach((userId, memberData) {
+          if (memberData is Map<String, dynamic>) {
+            membersList.add({
+              'id': userId,
+              'name': memberData['name']?.toString() ?? 'Unknown',
+            });
+          }
+        });
+      } else if (membersData is List) {
+        // List format: [{id: "userId", name: "John", role: "admin"}]
+        for (var member in membersData) {
+          if (member is Map<String, dynamic>) {
+            membersList.add({
+              'id': member['id']?.toString() ?? '',
+              'name': member['name']?.toString() ?? 'Unknown',
+            });
+          }
+        }
+      }
+
+      return membersList;
+    } catch (e) {
+      print('Error loading house members: $e');
+      return [];
+    }
+  }
+
+  /// Create a task from AI-detected agenda in chat message
+  Future<void> createTaskFromAI({
+    required String houseId,
+    required String title,
+    required String description,
+    String? assignedTo,
+    String? assignedToName,
+    DateTime? dueDate,
+    required String sourceMessage,
+  }) async {
+    // If no specific person is assigned, assign to the first available member
+    if (assignedTo == null || assignedToName == null) {
+      List<Map<String, String>> members = await getHouseMembers(houseId);
+      if (members.isNotEmpty) {
+        assignedTo = members.first['id']!;
+        assignedToName = members.first['name']!;
+      } else {
+        assignedTo = _auth.currentUser!.uid;
+        assignedToName = 'Unassigned';
+      }
+    }
+
+    await _firestore.collection('tasks').add({
+      'houseId': houseId,
+      'title': title,
+      'description': description,
+      'assignedTo': assignedTo,
+      'assignedToName': assignedToName,
+      'status': 'pending',
+      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'createdBy': 'ai_agent', // Mark as AI-created
+      'sourceMessage': sourceMessage, // Store the original message
+    });
+
+    // Create activity
+    await _createActivity(
+      houseId: houseId,
+      type: 'task_created',
+      title: 'Task Created (AI)',
+      description: 'Beemo detected a task from chat and assigned it to $assignedToName',
+      metadata: {'taskTitle': title, 'aiDetected': true},
+    );
+
+    // Send a Beemo message to confirm task creation
+    await _firestore.collection('chatMessages').add({
+      'houseId': houseId,
+      'senderId': 'beemo',
+      'senderName': 'Beemo',
+      'senderAvatar': '🤖',
+      'senderColor': '#FFC400',
+      'message': '✅ I detected a task and added it to your task list!\n\nTask: $title\nAssigned to: $assignedToName',
+      'messageType': 'text',
+      'timestamp': FieldValue.serverTimestamp(),
+      'isBeemo': true,
+    });
+  }
+
+  /// Delete all test tasks (for cleanup)
+  Future<void> deleteTestTasks(String houseId) async {
+    QuerySnapshot testTasks = await _firestore
+        .collection('tasks')
+        .where('houseId', isEqualTo: houseId)
+        .get();
+
+    WriteBatch batch = _firestore.batch();
+    int deleteCount = 0;
+
+    for (var doc in testTasks.docs) {
+      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+      String title = data['title'] ?? '';
+
+      // Delete if title contains "Test Task" or was created by test
+      if (title.contains('Test Task') || title.toLowerCase().contains('test')) {
+        batch.delete(doc.reference);
+        deleteCount++;
+      }
+    }
+
+    if (deleteCount > 0) {
+      await batch.commit();
+      print('Deleted $deleteCount test tasks');
+    }
+  }
+
   Future<void> updateTaskStatus(String taskId, String status) async {
     String userId = _auth.currentUser!.uid;
 

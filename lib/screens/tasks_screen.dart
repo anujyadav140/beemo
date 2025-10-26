@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
@@ -14,6 +15,20 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+
+  @override
+  void initState() {
+    super.initState();
+    _cleanupTestTasks();
+  }
+
+  Future<void> _cleanupTestTasks() async {
+    // Clean up test tasks on screen load
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    if (houseProvider.currentHouseId != null) {
+      await _firestoreService.deleteTestTasks(houseProvider.currentHouseId!);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,37 +78,59 @@ class _TasksScreenState extends State<TasksScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Top header with Lab icon and points badge
+                        // Top header with house icon and points badge
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF2C3E50),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.black, width: 2.5),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      '🌍',
-                                      style: TextStyle(fontSize: 24),
+                            StreamBuilder<DocumentSnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('houses')
+                                  .doc(houseProvider.currentHouseId)
+                                  .snapshots(),
+                              builder: (context, snapshot) {
+                                String houseName = 'House';
+                                String houseEmoji = '🏠';
+                                Color houseColor = const Color(0xFF00BCD4);
+
+                                if (snapshot.hasData && snapshot.data != null) {
+                                  final houseData = snapshot.data!.data() as Map<String, dynamic>?;
+                                  houseName = houseData?['houseName'] ?? 'House';
+                                  houseEmoji = houseData?['houseEmoji'] ?? '🏠';
+                                  final houseColorInt = houseData?['houseColor'];
+                                  if (houseColorInt != null) {
+                                    houseColor = Color(houseColorInt);
+                                  }
+                                }
+
+                                return Row(
+                                  children: [
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        color: houseColor,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.black, width: 2.5),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          houseEmoji,
+                                          style: const TextStyle(fontSize: 24),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  'The Lab',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w900,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ],
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      houseName,
+                                      style: const TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w900,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             StreamBuilder<int>(
                               stream: currentUserId != null

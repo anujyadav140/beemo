@@ -1,32 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../constants/colors.dart';
+import '../providers/house_provider.dart';
 
 class LabScreen extends StatelessWidget {
   const LabScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final houseProvider = Provider.of<HouseProvider>(context);
+    final houseId = houseProvider.currentHouseId;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: const BoxDecoration(
-                color: AppColors.yellow,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.science,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text('The Lab'),
-          ],
+        title: StreamBuilder<DocumentSnapshot>(
+          stream: houseId != null
+              ? FirebaseFirestore.instance
+                  .collection('houses')
+                  .doc(houseId)
+                  .snapshots()
+              : null,
+          builder: (context, snapshot) {
+            String houseName = 'House';
+            String houseEmoji = '🏠';
+            Color houseColor = const Color(0xFF00BCD4);
+
+            if (snapshot.hasData && snapshot.data != null) {
+              final houseData = snapshot.data!.data() as Map<String, dynamic>?;
+              houseName = houseData?['houseName'] ?? 'House';
+              houseEmoji = houseData?['houseEmoji'] ?? '🏠';
+              final houseColorInt = houseData?['houseColor'];
+              if (houseColorInt != null) {
+                houseColor = Color(houseColorInt);
+              }
+            }
+
+            return Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: houseColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black, width: 2),
+                  ),
+                  child: Center(
+                    child: Text(
+                      houseEmoji,
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(houseName),
+              ],
+            );
+          },
         ),
         actions: [
           IconButton(

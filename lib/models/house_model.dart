@@ -23,8 +23,33 @@ class House {
 
   factory House.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-    Map<String, dynamic> info = data['info'] ?? {};
-    Map<String, dynamic> membersData = data['members'] ?? {};
+    Map<String, dynamic> info = {};
+
+    // Handle info as either Map or other types from Firestore
+    if (data['info'] is Map<String, dynamic>) {
+      info = data['info'] as Map<String, dynamic>;
+    } else if (data['info'] is Map) {
+      info = Map<String, dynamic>.from(data['info'] as Map);
+    }
+
+    // Handle members as either Map or List from Firestore
+    Map<String, HouseMember> parsedMembers = {};
+    final membersData = data['members'];
+
+    if (membersData is Map) {
+      // If members is a Map, convert it
+      parsedMembers = (membersData as Map<String, dynamic>).map((key, value) =>
+        MapEntry(key, HouseMember.fromMap(value as Map<String, dynamic>)));
+    } else if (membersData is List) {
+      // If members is a List, convert it to a Map using index as key or member name
+      for (var i = 0; i < membersData.length; i++) {
+        if (membersData[i] is Map<String, dynamic>) {
+          final memberMap = membersData[i] as Map<String, dynamic>;
+          final memberName = memberMap['name'] ?? 'Member$i';
+          parsedMembers[memberName] = HouseMember.fromMap(memberMap);
+        }
+      }
+    }
 
     return House(
       id: doc.id,
@@ -33,8 +58,7 @@ class House {
       bathrooms: info['bathrooms'] ?? 0,
       createdAt: (info['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdBy: info['createdBy'] ?? '',
-      members: membersData.map((key, value) =>
-        MapEntry(key, HouseMember.fromMap(value as Map<String, dynamic>))),
+      members: parsedMembers,
       inviteCode: data['inviteCode'] ?? '',
     );
   }

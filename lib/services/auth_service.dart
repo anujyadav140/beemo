@@ -48,6 +48,7 @@ class AuthService {
             'avatarUrl': userCredential.user!.photoURL ?? '',
             'initials': _getInitials(name),
             'points': 500,
+            'pronouns': '',
           },
           'settings': {
             'notifications': true,
@@ -59,6 +60,13 @@ class AuthService {
             'totalFocusTime': 0,
             'totalBreakTime': 0,
           },
+          'hasCompletedGetStarted': false,
+          'hasCompletedAvatarSelection': false,
+          'hasCompletedHouseSetup': false,
+          'hasCompletedOnboarding': false,
+          'houseId': null,
+          'houseName': null,
+          'houseRole': null,
         });
       }
 

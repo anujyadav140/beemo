@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../providers/house_provider.dart';
 import 'agenda_screen.dart';
 import 'setup_house_screen.dart';
 
@@ -40,6 +43,9 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final houseProvider = Provider.of<HouseProvider>(context);
+    final houseId = houseProvider.currentHouseId;
+
     final days = _timeRemaining.inDays;
     final hours = _timeRemaining.inHours % 24;
     final minutes = _timeRemaining.inMinutes % 60;
@@ -71,37 +77,58 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.black, width: 2.5),
-                            ),
-                            child: ClipOval(
-                              child: Container(
-                                color: Colors.grey[800],
-                                child: const Icon(
-                                  Icons.public,
-                                  color: Colors.white70,
-                                  size: 28,
+                      StreamBuilder<DocumentSnapshot>(
+                        stream: houseId != null
+                            ? FirebaseFirestore.instance
+                                .collection('houses')
+                                .doc(houseId)
+                                .snapshots()
+                            : null,
+                        builder: (context, snapshot) {
+                          String houseName = 'House';
+                          String houseEmoji = '🏠';
+                          Color houseColor = const Color(0xFF00BCD4);
+
+                          if (snapshot.hasData && snapshot.data != null) {
+                            final houseData = snapshot.data!.data() as Map<String, dynamic>?;
+                            houseName = houseData?['houseName'] ?? 'House';
+                            houseEmoji = houseData?['houseEmoji'] ?? '🏠';
+                            final houseColorInt = houseData?['houseColor'];
+                            if (houseColorInt != null) {
+                              houseColor = Color(houseColorInt);
+                            }
+                          }
+
+                          return Row(
+                            children: [
+                              Container(
+                                width: 52,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  color: houseColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.black, width: 2.5),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    houseEmoji,
+                                    style: const TextStyle(fontSize: 28),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'The Lab',
-                            style: TextStyle(
-                              fontSize: 34,
-                              fontWeight: FontWeight.w900,
-                              fontStyle: FontStyle.italic,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                        ],
+                              const SizedBox(width: 12),
+                              Text(
+                                houseName,
+                                style: const TextStyle(
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.w900,
+                                  fontStyle: FontStyle.italic,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(

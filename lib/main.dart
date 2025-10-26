@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/house_provider.dart';
-import 'screens/auth/auth_wrapper.dart';
+import 'screens/app_wrapper.dart';
 import 'constants/theme.dart';
 
 void main() async {
@@ -37,7 +37,7 @@ class MyApp extends StatelessWidget {
         title: 'Beemo',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        home: const AuthWrapper(),
+        home: const AppWrapper(),
       ),
     );
   }

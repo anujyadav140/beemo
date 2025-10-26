@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
+import '../services/ai_service.dart';
+import '../services/simple_task_detector.dart';
 import '../models/chat_message_model.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -17,6 +20,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   final FirestoreService _firestoreService = FirestoreService();
+  final AIService _aiService = AIService();
 
   @override
   void initState() {
@@ -38,12 +42,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 400), () {
+      Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && _scrollController.hasClients) {
-          _scrollController.animateTo(
+          _scrollController.jumpTo(
             _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOut,
           );
         }
       });
@@ -77,9 +79,12 @@ class _ChatScreenState extends State<ChatScreen> {
     final colorIndex = authProvider.user!.uid.hashCode % colors.length;
     final userColor = colors[colorIndex].value.toRadixString(16).padLeft(8, '0').substring(2);
 
+    final messageText = _messageController.text.trim();
+
+    // Send the message
     await _firestoreService.sendMessage(
       houseId: houseProvider.currentHouseId!,
-      message: _messageController.text.trim(),
+      message: messageText,
       senderName: userName,
       senderAvatar: initials,
       senderColor: '#$userColor',
@@ -87,10 +92,95 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _messageController.clear();
     _scrollToBottom();
+
+    // AI-powered task detection
+    // Analyze the message in the background to detect if it contains a task
+    _analyzeMessageForTask(
+      messageText,
+      userName,
+      houseProvider.currentHouseId!,
+    );
+  }
+
+  Future<void> _analyzeMessageForTask(
+    String message,
+    String senderName,
+    String houseId,
+  ) async {
+    try {
+      // Get house members for context
+      final members = await _firestoreService.getHouseMembers(houseId);
+
+      // STRATEGY: Try simple detection first (works immediately without API)
+      // Then try AI detection as fallback
+
+      // Try simple pattern-based detection (no API required)
+      final simpleTask = SimpleTaskDetector.detectTask(message, members);
+
+      if (simpleTask != null && simpleTask.isTask) {
+        // Simple detector found a task! Create it immediately
+        await _firestoreService.createTaskFromAI(
+          houseId: houseId,
+          title: simpleTask.title!,
+          description: simpleTask.description!,
+          assignedTo: simpleTask.assignedTo,
+          assignedToName: simpleTask.assignedToName,
+          dueDate: simpleTask.dueDate,
+          sourceMessage: message,
+        );
+        print('✅ Task created via simple detection: ${simpleTask.title}');
+        return;
+      }
+
+      // If simple detection didn't find anything, try AI (requires API)
+      try {
+        final detectedTask = await _aiService.analyzeMessageForTask(
+          message,
+          senderName,
+          members,
+        );
+
+        if (detectedTask.isTask &&
+            detectedTask.title != null &&
+            detectedTask.description != null) {
+
+          // Get the assigned user's name if we have an ID
+          String? assignedToName;
+          if (detectedTask.assignedTo != null) {
+            final assignedMember = members.firstWhere(
+              (m) => m['id'] == detectedTask.assignedTo,
+              orElse: () => {'name': 'Unknown'},
+            );
+            assignedToName = assignedMember['name'];
+          }
+
+          // Create the task
+          await _firestoreService.createTaskFromAI(
+            houseId: houseId,
+            title: detectedTask.title!,
+            description: detectedTask.description!,
+            assignedTo: detectedTask.assignedTo,
+            assignedToName: assignedToName,
+            dueDate: detectedTask.dueDate,
+            sourceMessage: message,
+          );
+          print('✅ Task created via AI detection: ${detectedTask.title}');
+        }
+      } catch (aiError) {
+        print('AI detection failed (API might not be enabled): $aiError');
+        // This is OK - simple detection already ran above
+      }
+    } catch (e) {
+      // Silently fail - don't interrupt the chat experience
+      print('Error analyzing message for task: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final houseProvider = Provider.of<HouseProvider>(context);
+    final houseId = houseProvider.currentHouseId;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -113,81 +203,239 @@ class _ChatScreenState extends State<ChatScreen> {
             // Main content
             Column(
               children: [
-                // Yellow header
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFEC5D),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.black,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        width: 39,
-                        height: 39,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[700],
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.public,
-                          color: Colors.white70,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'The Lab',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w900,
-                                fontStyle: FontStyle.italic,
-                                color: Colors.black,
-                              ),
+                // Yellow header with house info
+                StreamBuilder<List<DocumentSnapshot>>(
+                  stream: houseId != null
+                      ? FirebaseFirestore.instance
+                          .collection('houses')
+                          .doc(houseId)
+                          .snapshots()
+                          .asyncMap((houseDoc) async {
+                            final houseData = houseDoc.data() as Map<String, dynamic>?;
+                            final members = List<String>.from(houseData?['members'] ?? []);
+
+                            // Fetch user details for each member
+                            final memberDocs = await Future.wait(
+                              members.map((memberId) =>
+                                FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(memberId)
+                                  .get()
+                              )
+                            );
+
+                            return memberDocs;
+                          })
+                      : null,
+                  builder: (context, memberSnapshot) {
+                    String houseName = 'Group Chat';
+                    String memberNames = 'and Beemo';
+
+                    if (houseId != null) {
+                      return StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('houses')
+                            .doc(houseId)
+                            .snapshots(),
+                        builder: (context, houseSnapshot) {
+                          if (houseSnapshot.hasData && houseSnapshot.data != null) {
+                            final houseData = houseSnapshot.data!.data() as Map<String, dynamic>?;
+                            houseName = houseData?['houseName'] ?? 'Group Chat';
+                          }
+
+                          if (memberSnapshot.hasData && memberSnapshot.data != null) {
+                            final memberDocs = memberSnapshot.data!;
+                            final names = memberDocs.map((doc) {
+                              final data = doc.data() as Map<String, dynamic>?;
+                              return data?['profile']?['name'] ?? 'User';
+                            }).toList();
+
+                            if (names.isNotEmpty) {
+                              memberNames = '${names.join(', ')} and Beemo';
+                            }
+                          }
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFEC5D),
+                              borderRadius: BorderRadius.circular(13),
                             ),
-                            Text(
-                              'Meher, Charls, Ria, Ray and Beemo',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: Colors.black.withOpacity(0.8),
-                              ),
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () => Navigator.pop(context),
+                                  child: const Icon(
+                                    Icons.arrow_back,
+                                    color: Colors.black,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Container(
+                                  width: 39,
+                                  height: 39,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[700],
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.public,
+                                    color: Colors.white70,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        houseName,
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w900,
+                                          fontStyle: FontStyle.italic,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      Text(
+                                        memberNames,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w400,
+                                          color: Colors.black.withOpacity(0.8),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          );
+                        },
+                      );
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEC5D),
+                        borderRadius: BorderRadius.circular(13),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.black,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Group Chat',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              fontStyle: FontStyle.italic,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
 
-                // Avatar row
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  child: SizedBox(
-                    height: 24,
-                    child: Stack(
-                      children: [
-                        Positioned(left: 0, child: _buildAvatar('A', const Color(0xFFFF3B79))),
-                        Positioned(left: 14, child: _buildAvatar('B', const Color(0xFF63BDA4))),
-                        Positioned(left: 28, child: _buildAvatar('C', const Color(0xFFFFEC5D), textColor: Colors.black)),
-                        Positioned(left: 42, child: _buildAvatar('D', const Color(0xFF16A3D0))),
-                        Positioned(left: 56, child: _buildBeemoAvatar()),
-                      ],
-                    ),
-                  ),
+                // Avatar row with real member data
+                StreamBuilder<List<DocumentSnapshot>>(
+                  stream: houseId != null
+                      ? FirebaseFirestore.instance
+                          .collection('houses')
+                          .doc(houseId)
+                          .snapshots()
+                          .asyncMap((houseDoc) async {
+                            final houseData = houseDoc.data() as Map<String, dynamic>?;
+                            final members = List<String>.from(houseData?['members'] ?? []);
+
+                            final memberDocs = await Future.wait(
+                              members.map((memberId) =>
+                                FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(memberId)
+                                  .get()
+                              )
+                            );
+
+                            return memberDocs;
+                          })
+                      : null,
+                  builder: (context, snapshot) {
+                    List<Widget> avatarWidgets = [];
+
+                    if (snapshot.hasData && snapshot.data != null) {
+                      final memberDocs = snapshot.data!;
+
+                      for (int i = 0; i < memberDocs.length && i < 5; i++) {
+                        final memberData = memberDocs[i].data() as Map<String, dynamic>?;
+                        final avatarEmoji = memberData?['profile']?['avatarEmoji'] ?? '👤';
+                        final avatarColor = memberData?['profile']?['avatarColor'];
+
+                        Color color = const Color(0xFFFF4D6D);
+                        if (avatarColor != null) {
+                          color = Color(avatarColor);
+                        }
+
+                        avatarWidgets.add(
+                          Positioned(
+                            left: i * 14.0,
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.black, width: 2),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  avatarEmoji,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      // Add Beemo at the end
+                      avatarWidgets.add(
+                        Positioned(
+                          left: avatarWidgets.length * 14.0,
+                          child: _buildBeemoAvatar(),
+                        ),
+                      );
+                    } else {
+                      // Default fallback
+                      avatarWidgets = [
+                        Positioned(left: 0, child: _buildBeemoAvatar()),
+                      ];
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      child: SizedBox(
+                        height: 24,
+                        child: Stack(
+                          children: avatarWidgets,
+                        ),
+                      ),
+                    );
+                  },
                 ),
 
                 // Chat messages
@@ -206,12 +454,6 @@ class _ChatScreenState extends State<ChatScreen> {
                       return StreamBuilder<List<ChatMessage>>(
                         stream: _firestoreService.getChatMessagesStream(houseProvider.currentHouseId!),
                         builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(
-                              child: CircularProgressIndicator(color: Color(0xFFFFC400)),
-                            );
-                          }
-
                           if (snapshot.hasError) {
                             return Center(
                               child: Text(
@@ -225,50 +467,50 @@ class _ChatScreenState extends State<ChatScreen> {
                           final authProvider = Provider.of<AuthProvider>(context);
                           final currentUserId = authProvider.user?.uid;
 
-                          // Auto-scroll when new messages arrive
+                          // Auto-scroll to bottom when new messages arrive
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             if (_scrollController.hasClients) {
-                              _scrollController.animateTo(
+                              _scrollController.jumpTo(
                                 _scrollController.position.maxScrollExtent,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut,
                               );
                             }
                           });
 
-                          return SingleChildScrollView(
+                          return ListView.builder(
                             controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (messages.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.all(40.0),
-                                    child: Center(
-                                      child: Text(
-                                        'No messages yet.\nStart the conversation!',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 16,
-                                        ),
+                            padding: const EdgeInsets.only(
+                              left: 12,
+                              right: 12,
+                              top: 8,
+                              bottom: 80, // Space for the input bar
+                            ),
+                            itemCount: messages.isEmpty ? 1 : messages.length,
+                            itemBuilder: (context, index) {
+                              if (messages.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(40.0),
+                                  child: Center(
+                                    child: Text(
+                                      'No messages yet.\nStart the conversation!',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 16,
                                       ),
                                     ),
-                                  )
-                                else
-                                  ...messages.map((message) {
-                                    final isCurrentUser = message.senderId == currentUserId;
-                                    final isBeemo = message.isBeemo;
+                                  ),
+                                );
+                              }
 
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
-                                      child: _buildMessageWidget(message, isCurrentUser, isBeemo),
-                                    );
-                                  }),
-                                const SizedBox(height: 100),
-                              ],
-                            ),
+                              final message = messages[index];
+                              final isCurrentUser = message.senderId == currentUserId;
+                              final isBeemo = message.isBeemo;
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: _buildMessageWidget(message, isCurrentUser, isBeemo),
+                              );
+                            },
                           );
                         },
                       );

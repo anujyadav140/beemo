@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import '../providers/auth_provider.dart';
+import '../providers/house_provider.dart';
 import 'meeting_notes_screen.dart';
 import 'tasks_screen.dart';
 import 'agenda_screen.dart';
@@ -7,6 +13,7 @@ import 'chat_screen.dart';
 import 'next_meeting_screen.dart';
 import 'setup_house_screen.dart';
 import 'recent_activity_screen.dart';
+import 'account_settings_screen.dart';
 
 class DashScreen extends StatefulWidget {
   const DashScreen({super.key});
@@ -26,195 +33,295 @@ class _DashScreenState extends State<DashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final houseProvider = Provider.of<HouseProvider>(context);
+    final userId = authProvider.user?.uid;
+    final houseId = houseProvider.currentHouseId;
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
-                    // Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.black, width: 2.5),
-                              ),
-                              child: ClipOval(
-                                child: Container(
-                                  color: Colors.grey[800],
-                                  child: const Icon(
-                                    Icons.public,
-                                    color: Colors.white70,
-                                    size: 28,
-                                  ),
+            SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 100.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  // Header with StreamBuilder for both house and user data
+                  StreamBuilder<DocumentSnapshot>(
+                    stream: houseId != null
+                        ? FirebaseFirestore.instance
+                              .collection('houses')
+                              .doc(houseId)
+                              .snapshots()
+                        : null,
+                    builder: (context, houseSnapshot) {
+                      String houseName = 'My House';
+                      String houseCode = '';
+                      String houseEmoji = '🏠';
+                      Color houseColor = const Color(0xFF00BCD4);
+
+                      if (houseSnapshot.hasData && houseSnapshot.data != null) {
+                        final houseData =
+                            houseSnapshot.data!.data() as Map<String, dynamic>?;
+                        houseName = houseData?['houseName'] ?? 'My House';
+                        houseCode = houseData?['houseCode'] ?? '';
+                        houseEmoji = houseData?['houseEmoji'] ?? '🏠';
+                        final houseColorInt = houseData?['houseColor'];
+                        if (houseColorInt != null) {
+                          houseColor = Color(houseColorInt);
+                        }
+                      }
+
+                      return StreamBuilder<DocumentSnapshot>(
+                        stream: userId != null
+                            ? FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(userId)
+                                  .snapshots()
+                            : null,
+                        builder: (context, userSnapshot) {
+                          String avatarEmoji = '👤';
+                          Color avatarColor = const Color(0xFFFF4D8D);
+
+                          if (userSnapshot.hasData &&
+                              userSnapshot.data != null) {
+                            final userData =
+                                userSnapshot.data!.data()
+                                    as Map<String, dynamic>?;
+                            avatarEmoji =
+                                userData?['profile']?['avatarEmoji'] ?? '👤';
+                            final avatarColorInt =
+                                userData?['profile']?['avatarColor'];
+                            if (avatarColorInt != null) {
+                              avatarColor = Color(avatarColorInt);
+                            }
+                          }
+
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    // House Avatar
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const AccountSettingsScreen(),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        width: 52,
+                                        height: 52,
+                                        decoration: BoxDecoration(
+                                          color: houseColor,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.black,
+                                            width: 2.5,
+                                          ),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            houseEmoji,
+                                            style: const TextStyle(
+                                              fontSize: 28,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  const AccountSettingsScreen(),
+                                            ),
+                                          );
+                                        },
+                                        child: Text(
+                                          houseName,
+                                          style: const TextStyle(
+                                            fontSize: 34,
+                                            fontWeight: FontWeight.w900,
+                                            fontStyle: FontStyle.italic,
+                                            letterSpacing: -0.5,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'The Lab',
-                              style: TextStyle(
-                                fontSize: 34,
-                                fontWeight: FontWeight.w900,
-                                fontStyle: FontStyle.italic,
-                                letterSpacing: -0.5,
+                              const SizedBox(width: 12),
+                              StreamBuilder<DocumentSnapshot>(
+                                stream: userId != null
+                                    ? FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(userId)
+                                          .snapshots()
+                                    : null,
+                                builder: (context, pointsSnapshot) {
+                                  int points = 500;
+                                  if (pointsSnapshot.hasData &&
+                                      pointsSnapshot.data != null) {
+                                    final userData =
+                                        pointsSnapshot.data!.data()
+                                            as Map<String, dynamic>?;
+                                    points =
+                                        userData?['profile']?['points'] ?? 500;
+                                  }
+
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFC400),
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          points.toString(),
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            Container(
+                                              width: 22,
+                                              height: 22,
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange[800],
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                            Container(
+                                              width: 14,
+                                              height: 14,
+                                              decoration: const BoxDecoration(
+                                                color: Color(0xFFFF9500),
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                            Container(
+                                              width: 6,
+                                              height: 6,
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange[900],
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
                               ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Agenda goal
+                  const Center(
+                    child: Text(
+                      'Agenda items goal: 3/4',
+                      style: TextStyle(fontSize: 13, color: Colors.black87),
+                    ),
+                  ),
+
+                  // Cards 2x2 Grid - Completely redesigned from scratch
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left Column
+                      Expanded(
+                        child: Column(
+                          children: [
+                            // Meeting Notes (yellow) - Very short
+                            SizedBox(
+                              height: 70,
+                              child: _buildMeetingNotesCard(),
+                            ),
+                            const SizedBox(height: 12),
+                            // Tasks (pink) - Tall
+                            SizedBox(
+                              height: 200,
+                              child: _buildTasksCard(),
                             ),
                           ],
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFC400),
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Row(
-                            children: [
-                              const Text(
-                                '500',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Container(
-                                    width: 22,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange[800],
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  Container(
-                                    width: 14,
-                                    height: 14,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFFF9500),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange[900],
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-
-                    // Agenda goal
-                    const Center(
-                      child: Text(
-                        'Agenda items goal: 3/4',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.black87,
-                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Cards Custom Layout
-                    SizedBox(
-                      height: 222,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Left Column
-                          Expanded(
-                            child: Column(
-                              children: [
-                                // Meeting Notes (small)
-                                SizedBox(
-                                  height: 60,
-                                  child: _buildMeetingNotesCard(),
-                                ),
-                                const SizedBox(height: 12),
-                                // Recent Activity (tall)
-                                SizedBox(
-                                  height: 150,
-                                  child: _buildRecentActivityCard(),
-                                ),
-                              ],
+                      const SizedBox(width: 12),
+                      // Right Column
+                      Expanded(
+                        child: Column(
+                          children: [
+                            // Activity (cyan) - Tall
+                            SizedBox(
+                              height: 160,
+                              child: _buildRecentActivityCard(),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Right Column
-                          Expanded(
-                            child: Column(
-                              children: [
-                                // Tasks (tall)
-                                SizedBox(
-                                  height: 100,
-                                  child: _buildTasksCard(),
-                                ),
-                                const SizedBox(height: 12),
-                                // Next Meeting (short)
-                                SizedBox(
-                                  height: 110,
-                                  child: _buildNextMeetingCard(),
-                                ),
-                              ],
+                            const SizedBox(height: 12),
+                            // Next Meeting (green) - Medium
+                            SizedBox(
+                              height: 110,
+                              child: _buildNextMeetingCard(),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Group Chat Section
-                    const Text(
-                      'Group chat with beemo',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Chat Container with Neobrutalist Border
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChatScreen(),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(20),
+                          ],
                         ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Group Chat Section
+                  const Text(
+                    'Group chat with beemo',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Chat Container with Neobrutalist Border
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ChatScreen(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 5, right: 5),
                         decoration: BoxDecoration(
@@ -251,9 +358,12 @@ class _DashScreenState extends State<DashScreen> {
                                     child: Image.network(
                                       'https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=400',
                                       fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Container(color: Colors.transparent);
-                                      },
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                            return Container(
+                                              color: Colors.transparent,
+                                            );
+                                          },
                                     ),
                                   ),
                                 ),
@@ -265,113 +375,365 @@ class _DashScreenState extends State<DashScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Profile Avatars (stacked horizontally)
-                                  Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 110,
-                                        height: 28,
-                                        child: Stack(
-                                          children: [
-                                            _buildStackedAvatar('A', const Color(0xFFFF4D6D), 0),
-                                            _buildStackedAvatar('B', const Color(0xFF4D9FFF), 20),
-                                            _buildStackedAvatar('C', const Color(0xFF4DFF88), 40),
-                                            _buildStackedAvatar('L', const Color(0xFFFFEB3B), 60),
+                                  // Profile Avatars (stacked horizontally) - Dynamic from house members
+                                  StreamBuilder<List<DocumentSnapshot>>(
+                                    stream: houseId != null
+                                        ? FirebaseFirestore.instance
+                                              .collection('houses')
+                                              .doc(houseId)
+                                              .snapshots()
+                                              .asyncMap((houseDoc) async {
+                                                final houseData =
+                                                    houseDoc.data()
+                                                        as Map<
+                                                          String,
+                                                          dynamic
+                                                        >?;
+                                                final members =
+                                                    List<String>.from(
+                                                      houseData?['members'] ??
+                                                          [],
+                                                    );
+
+                                                // Fetch user details for each member
+                                                final memberDocs =
+                                                    await Future.wait(
+                                                      members.map(
+                                                        (memberId) =>
+                                                            FirebaseFirestore
+                                                                .instance
+                                                                .collection(
+                                                                  'users',
+                                                                )
+                                                                .doc(memberId)
+                                                                .get(),
+                                                      ),
+                                                    );
+
+                                                return memberDocs;
+                                              })
+                                        : null,
+                                    builder: (context, snapshot) {
+                                      List<Widget> avatarWidgets = [];
+
+                                      if (snapshot.hasData &&
+                                          snapshot.data != null) {
+                                        final memberDocs = snapshot.data!;
+
+                                        // Show ALL members, not just 4
+                                        for (
+                                          int i = 0;
+                                          i < memberDocs.length;
+                                          i++
+                                        ) {
+                                          final memberData =
+                                              memberDocs[i].data()
+                                                  as Map<String, dynamic>?;
+                                          final avatarEmoji =
+                                              memberData?['profile']?['avatarEmoji'] ??
+                                              '👤';
+                                          final avatarColor =
+                                              memberData?['profile']?['avatarColor'];
+
+                                          Color color = const Color(0xFFFF4D6D);
+                                          if (avatarColor != null) {
+                                            color = Color(avatarColor);
+                                          }
+
+                                          avatarWidgets.add(
                                             Positioned(
-                                              left: 80,
+                                              left: i * 20.0,
                                               child: Container(
                                                 width: 28,
                                                 height: 28,
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFFFC400),
+                                                  color: color,
                                                   shape: BoxShape.circle,
-                                                  border: Border.all(color: Colors.black, width: 2),
+                                                  border: Border.all(
+                                                    color: Colors.black,
+                                                    width: 2,
+                                                  ),
                                                 ),
-                                                child: const Center(
+                                                child: Center(
                                                   child: Text(
-                                                    '🤖',
-                                                    style: TextStyle(fontSize: 13),
+                                                    avatarEmoji,
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
+                                          );
+                                        }
 
-                                  // Beemo Message with icon outside
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Beemo Icon (outside bubble)
-                                      Container(
-                                        width: 28,
-                                        height: 28,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFFC400),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.black, width: 2),
-                                        ),
-                                        child: const Center(
-                                          child: Text(
-                                            '🤖',
-                                            style: TextStyle(fontSize: 13),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // Chat Bubble
-                                      Container(
-                                        width: MediaQuery.of(context).size.width * 0.48,
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            const Text(
-                                              'Beemo',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 13,
+                                        // Add Beemo at the end
+                                        avatarWidgets.add(
+                                          Positioned(
+                                            left: avatarWidgets.length * 20.0,
+                                            child: Container(
+                                              width: 28,
+                                              height: 28,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFFC400),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: Colors.black,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              child: const Center(
+                                                child: Text(
+                                                  '🤖',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
                                               ),
                                             ),
-                                            const SizedBox(height: 6),
-                                            const Text(
-                                              "let's poll",
-                                              style: TextStyle(fontSize: 12),
+                                          ),
+                                        );
+                                      } else {
+                                        // Default fallback
+                                        avatarWidgets = [
+                                          Positioned(
+                                            left: 0,
+                                            child: Container(
+                                              width: 28,
+                                              height: 28,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFFC400),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: Colors.black,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              child: const Center(
+                                                child: Text(
+                                                  '🤖',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
-                                            const SizedBox(height: 6),
-                                            _buildPollOption('Friday : 9 am'),
-                                            _buildPollOption('Friday : 10 am'),
-                                            _buildPollOption('Friday : 11 am'),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
+                                          ),
+                                        ];
+                                      }
+
+                                      // Calculate dynamic width based on number of avatars
+                                      final stackWidth =
+                                          (avatarWidgets.length * 20.0) + 8;
+
+                                      return Row(
+                                        children: [
+                                          SizedBox(
+                                            width: stackWidth,
+                                            height: 28,
+                                            child: Stack(
+                                              children: avatarWidgets,
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
                                   ),
                                   const SizedBox(height: 8),
 
-                                  // Chat Messages with Neobrutalist Borders
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildNeobrutalistChatBubble(
-                                          "I've completed can\nsomeone confirm.",
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: _buildNeobrutalistChatBubble(
-                                          "Can we change time\nfor our next meeting?",
-                                        ),
-                                      ),
-                                    ],
+                                  // Latest messages from Firebase (showing last 3)
+                                  StreamBuilder<QuerySnapshot>(
+                                    stream: houseId != null
+                                        ? FirebaseFirestore.instance
+                                              .collection('chatMessages')
+                                              .where(
+                                                'houseId',
+                                                isEqualTo: houseId,
+                                              )
+                                              .orderBy(
+                                                'timestamp',
+                                                descending: true,
+                                              )
+                                              .limit(3)
+                                              .snapshots()
+                                        : null,
+                                    builder: (context, snapshot) {
+                                      if (snapshot.hasError) {
+                                        return Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(
+                                              0.1,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              'Error: ${snapshot.error}',
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      final messages =
+                                          snapshot.data?.docs ?? [];
+
+                                      if (messages.isEmpty) {
+                                        return Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(
+                                              0.1,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: const Center(
+                                            child: Text(
+                                              'No messages yet. Start the conversation!',
+                                              style: TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      return Column(
+                                        children: messages.map((messageDoc) {
+                                          final messageData =
+                                              messageDoc.data()
+                                                  as Map<String, dynamic>?;
+                                          final message =
+                                              messageData?['message'] ?? '';
+                                          final senderName =
+                                              messageData?['senderName'] ??
+                                              'User';
+                                          final isBeemo =
+                                              messageData?['isBeemo'] ?? false;
+                                          final senderAvatar =
+                                              messageData?['senderAvatar'] ??
+                                              '👤';
+                                          final senderColorHex =
+                                              messageData?['senderColor'] ??
+                                              '#16A3D0';
+
+                                          Color avatarColor = const Color(
+                                            0xFF16A3D0,
+                                          );
+                                          try {
+                                            avatarColor = Color(
+                                              int.parse(
+                                                senderColorHex.replaceFirst(
+                                                  '#',
+                                                  '0xFF',
+                                                ),
+                                              ),
+                                            );
+                                          } catch (e) {
+                                            // Use default color
+                                          }
+
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 8,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                // Avatar Icon
+                                                Container(
+                                                  width: 28,
+                                                  height: 28,
+                                                  decoration: BoxDecoration(
+                                                    color: isBeemo
+                                                        ? const Color(
+                                                            0xFFFFC400,
+                                                          )
+                                                        : avatarColor,
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(
+                                                      color: Colors.black,
+                                                      width: 2,
+                                                    ),
+                                                  ),
+                                                  child: Center(
+                                                    child: Text(
+                                                      isBeemo
+                                                          ? '🤖'
+                                                          : senderAvatar,
+                                                      style: const TextStyle(
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                // Chat Bubble
+                                                Expanded(
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                          10,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                    ),
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                          isBeemo
+                                                              ? 'Beemo'
+                                                              : senderName,
+                                                          style:
+                                                              const TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w900,
+                                                                fontSize: 13,
+                                                              ),
+                                                        ),
+                                                        const SizedBox(
+                                                          height: 6,
+                                                        ),
+                                                        Text(
+                                                          message.length > 60
+                                                              ? '${message.substring(0, 60)}...'
+                                                              : message,
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize: 12,
+                                                              ),
+                                                          maxLines: 2,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      );
+                                    },
                                   ),
                                   const SizedBox(height: 8),
 
@@ -396,7 +758,11 @@ class _DashScreenState extends State<DashScreen> {
                                             ),
                                           ),
                                         ),
-                                        const Icon(Icons.mic, size: 20, color: Colors.black87),
+                                        const Icon(
+                                          Icons.mic,
+                                          size: 20,
+                                          color: Colors.black87,
+                                        ),
                                         const SizedBox(width: 8),
                                         Container(
                                           width: 32,
@@ -421,77 +787,471 @@ class _DashScreenState extends State<DashScreen> {
                         ),
                       ),
                     ),
-                    ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            // Floating Bottom Navigation
+            Positioned(
+              bottom: 20,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16213E),
+                    borderRadius: BorderRadius.circular(34),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SetupHouseScreen(),
+                            ),
+                          );
+                        },
+                        child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                      ),
+                      const SizedBox(width: 28),
+                      GestureDetector(
+                        onTap: () {},
+                        child: _buildBeemoNavIcon(true),
+                      ),
+                      const SizedBox(width: 28),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AgendaScreen(),
+                            ),
+                          );
+                        },
+                        child: _buildNavIcon(Icons.event_note_rounded, false),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          // Bottom Navigation (always visible)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16.0, top: 4.0),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF16213E),
-                  borderRadius: BorderRadius.circular(34),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SetupHouseScreen(),
-                          ),
-                        );
-                      },
-                      child: _buildNavIcon(Icons.view_in_ar_rounded, false),
-                    ),
-                    const SizedBox(width: 28),
-                    _buildBeemoNavIcon(true),
-                    const SizedBox(width: 28),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const AgendaScreen(),
-                          ),
-                        );
-                      },
-                      child: _buildNavIcon(Icons.event_note_rounded, false),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+          ],
         ),
       ),
     );
   }
 
   Widget _buildMeetingNotesCard() {
-    return _AnimatedMeetingNotesCard();
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const MeetingNotesScreen()),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFD93D),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.black, width: 3),
+          boxShadow: const [
+            BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Expanded(
+              child: Text(
+    'Notes',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.black,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.edit,
+                size: 16,
+                color: Color(0xFFFFD93D),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildTasksCard() {
-    return _AnimatedTasksCard();
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: houseId != null
+          ? FirebaseFirestore.instance
+                .collection('houses')
+                .doc(houseId)
+                .collection('tasks')
+                .where('status', isEqualTo: 'pending')
+                .orderBy('createdAt', descending: true)
+                .limit(2)
+                .snapshots()
+          : null,
+      builder: (context, snapshot) {
+        final tasks = snapshot.hasData ? snapshot.data!.docs : [];
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const TasksScreen()),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF4D8D),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.black, width: 3),
+              boxShadow: const [
+                BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0),
+              ],
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Tasks',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_box_outlined,
+                        size: 16,
+                        color: Color(0xFFFF4D8D),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: tasks.isEmpty
+                      ? const Text(
+                          'No tasks yet',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        )
+                      : SingleChildScrollView(
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: Column(
+                            children: tasks.take(2).map((taskDoc) {
+                              final task = taskDoc.data() as Map<String, dynamic>;
+                              final title = task['title'] ?? 'Untitled';
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 18,
+                                      height: 18,
+                                      margin: const EdgeInsets.only(top: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.transparent,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: Colors.white, width: 2.5),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.3,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildRecentActivityCard() {
-    return _AnimatedRecentActivityCard();
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: houseId != null
+          ? FirebaseFirestore.instance
+                .collection('houses')
+                .doc(houseId)
+                .collection('activity')
+                .orderBy('timestamp', descending: true)
+                .limit(1)
+                .snapshots()
+          : null,
+      builder: (context, snapshot) {
+        final activities = snapshot.hasData ? snapshot.data!.docs : [];
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const RecentActivityScreen(),
+              ),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF00BCD4),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.black, width: 3),
+              boxShadow: const [
+                BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0),
+              ],
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Activity',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.notifications,
+                        size: 16,
+                        color: Color(0xFF00BCD4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: activities.isEmpty
+                      ? const Text(
+                          'No activity yet',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        )
+                      : SingleChildScrollView(
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: Column(
+                            children: activities.take(1).map((activityDoc) {
+                              final activity = activityDoc.data() as Map<String, dynamic>;
+                              final description = activity['description'] ?? 'Activity';
+
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '• ',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      description,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.3,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildNextMeetingCard() {
-    return _AnimatedNextMeetingCard();
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: houseId != null
+          ? FirebaseFirestore.instance
+                .collection('houses')
+                .doc(houseId)
+                .snapshots()
+          : null,
+      builder: (context, snapshot) {
+        // Dummy data for now
+        String meetingDate = 'Oct 8';
+        String meetingTime = '1:00 pm';
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const NextMeetingScreen(),
+              ),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFA8E6CF),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.black, width: 3),
+              boxShadow: const [
+                BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0),
+              ],
+            ),
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.max,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Next Meeting',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.black,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.calendar_today,
+                        size: 14,
+                        color: Color(0xFFA8E6CF),
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      meetingDate,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black,
+                        height: 1.0,
+                      ),
+                    ),
+                    Text(
+                      meetingTime,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildAvatar(String letter, Color color) {
@@ -531,13 +1291,7 @@ class _DashScreenState extends State<DashScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 11,
-              height: 1.2,
-            ),
-          ),
+          Text(text, style: const TextStyle(fontSize: 11, height: 1.2)),
         ],
       ),
     );
@@ -550,13 +1304,7 @@ class _DashScreenState extends State<DashScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          height: 1.3,
-        ),
-      ),
+      child: Text(text, style: const TextStyle(fontSize: 11, height: 1.3)),
     );
   }
 
@@ -587,13 +1335,52 @@ class _DashScreenState extends State<DashScreen> {
         border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
       ),
       child: Center(
-        child: Text(
-          '🤖',
-          style: TextStyle(
-            fontSize: isActive ? 24 : 20,
-          ),
-        ),
+        child: Text('🤖', style: TextStyle(fontSize: isActive ? 24 : 20)),
       ),
+    );
+  }
+
+  Widget _buildFloatingNavIcon(IconData icon, bool isActive) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: isActive ? const Color(0xFFFF4D8D) : Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.black, width: 2.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Icon(
+        icon,
+        color: isActive ? Colors.white : Colors.black,
+        size: 26,
+      ),
+    );
+  }
+
+  Widget _buildFloatingBeemoNavIcon(bool isActive) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: isActive ? const Color(0xFFFF4D8D) : Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.black, width: 2.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Center(child: Text('🤖', style: const TextStyle(fontSize: 26))),
     );
   }
 
@@ -636,14 +1423,351 @@ class _DashScreenState extends State<DashScreen> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.black, width: 2),
         ),
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontSize: 11,
-            height: 1.3,
-          ),
-        ),
+        child: Text(text, style: const TextStyle(fontSize: 11, height: 1.3)),
       ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6, right: 6),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.black, width: 3),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 4, right: 4),
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF4D8D),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.black, width: 3),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.logout,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Title
+                  const Text(
+                    'Sign Out?',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Message
+                  const Text(
+                    'Are you sure you want to sign out\nfrom your account?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.black54,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Buttons
+                  Row(
+                    children: [
+                      // Cancel Button
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Container(
+                              margin: const EdgeInsets.only(
+                                bottom: 4,
+                                right: 4,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.black,
+                                  width: 2.5,
+                                ),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // Sign Out Button
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () async {
+                            Navigator.of(context).pop(); // Close dialog
+                            await Provider.of<AuthProvider>(
+                              context,
+                              listen: false,
+                            ).signOut();
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Container(
+                              margin: const EdgeInsets.only(
+                                bottom: 4,
+                                right: 4,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF4D8D),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.black,
+                                  width: 2.5,
+                                ),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'Sign Out',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showShareDialog(
+    BuildContext context,
+    String houseName,
+    String houseCode,
+  ) {
+    if (houseCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No house code available'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final inviteUrl = 'beemo://join-house?code=$houseCode';
+    final shareText =
+        'Join my house "$houseName" on Beemo! Use code: $houseCode';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6, right: 6),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.black, width: 3),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Title
+                  const Text(
+                    'Invite to House',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // House Name
+                  Text(
+                    houseName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // QR Code
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.black, width: 3),
+                    ),
+                    child: QrImageView(
+                      data: inviteUrl,
+                      version: QrVersions.auto,
+                      size: 200,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // House Code
+                  const Text(
+                    'House Code',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F5F0),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.black, width: 2.5),
+                    ),
+                    child: Text(
+                      houseCode,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        fontStyle: FontStyle.italic,
+                        letterSpacing: 2,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Share Button
+                  GestureDetector(
+                    onTap: () {
+                      Share.share(shareText);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 4, right: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00BCD4),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.black, width: 2.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.share, color: Colors.white, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Share Invite',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Close Button
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -651,7 +1775,8 @@ class _DashScreenState extends State<DashScreen> {
 // Animated Card Widgets
 class _AnimatedMeetingNotesCard extends StatefulWidget {
   @override
-  State<_AnimatedMeetingNotesCard> createState() => _AnimatedMeetingNotesCardState();
+  State<_AnimatedMeetingNotesCard> createState() =>
+      _AnimatedMeetingNotesCardState();
 }
 
 class _AnimatedMeetingNotesCardState extends State<_AnimatedMeetingNotesCard> {
@@ -725,6 +1850,11 @@ class _AnimatedTasksCardState extends State<_AnimatedTasksCard> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final houseProvider = Provider.of<HouseProvider>(context);
+    final userId = authProvider.user?.uid;
+    final houseId = houseProvider.currentHouseId;
+
     return GestureDetector(
       onTapDown: (_) {
         setState(() => _isPressed = true);
@@ -764,27 +1894,51 @@ class _AnimatedTasksCardState extends State<_AnimatedTasksCard> {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.black, width: 3),
           ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Tasks',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                ),
-              ),
-              Text(
-                'Clean carpet before sunday',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.white,
-                  height: 1.3,
-                ),
-              ),
-            ],
+          child: StreamBuilder<QuerySnapshot>(
+            stream: houseId != null && userId != null
+                ? FirebaseFirestore.instance
+                      .collection('tasks')
+                      .where('houseId', isEqualTo: houseId)
+                      .where('assignedTo', isEqualTo: userId)
+                      .where('status', isEqualTo: 'pending')
+                      .orderBy('createdAt', descending: true)
+                      .limit(1)
+                      .snapshots()
+                : null,
+            builder: (context, snapshot) {
+              String taskText = 'No tasks yet';
+
+              if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                final taskData =
+                    snapshot.data!.docs.first.data() as Map<String, dynamic>?;
+                taskText = taskData?['title'] ?? 'Task';
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Tasks',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    taskText,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.white,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -794,10 +1948,12 @@ class _AnimatedTasksCardState extends State<_AnimatedTasksCard> {
 
 class _AnimatedRecentActivityCard extends StatefulWidget {
   @override
-  State<_AnimatedRecentActivityCard> createState() => _AnimatedRecentActivityCardState();
+  State<_AnimatedRecentActivityCard> createState() =>
+      _AnimatedRecentActivityCardState();
 }
 
-class _AnimatedRecentActivityCardState extends State<_AnimatedRecentActivityCard> {
+class _AnimatedRecentActivityCardState
+    extends State<_AnimatedRecentActivityCard> {
   bool _isPressed = false;
 
   @override
@@ -811,7 +1967,9 @@ class _AnimatedRecentActivityCardState extends State<_AnimatedRecentActivityCard
         if (mounted) {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const RecentActivityScreen()),
+            MaterialPageRoute(
+              builder: (context) => const RecentActivityScreen(),
+            ),
           );
         }
         if (mounted) {
@@ -918,7 +2076,8 @@ class _AnimatedRecentActivityCardState extends State<_AnimatedRecentActivityCard
 
 class _AnimatedNextMeetingCard extends StatefulWidget {
   @override
-  State<_AnimatedNextMeetingCard> createState() => _AnimatedNextMeetingCardState();
+  State<_AnimatedNextMeetingCard> createState() =>
+      _AnimatedNextMeetingCardState();
 }
 
 class _AnimatedNextMeetingCardState extends State<_AnimatedNextMeetingCard> {
@@ -989,10 +2148,7 @@ class _AnimatedNextMeetingCardState extends State<_AnimatedNextMeetingCard> {
               ),
               Text(
                 '1:00 pm',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.white),
               ),
             ],
           ),

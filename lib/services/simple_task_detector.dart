@@ -31,8 +31,34 @@ class SimpleTaskDetector {
     List<Map<String, String>> houseMembers,
   ) {
     final lowerMessage = message.toLowerCase();
+    final trimmedMessage = message.trim();
 
-    // Check if message contains task-like action verbs
+    // Filter 1: Ignore very short messages (likely casual chat)
+    if (trimmedMessage.length < 10) {
+      print('Task detection: Rejected (too short) - "$trimmedMessage"');
+      return null;
+    }
+
+    // Filter 2: Ignore common greetings and casual phrases
+    final casualPhrases = [
+      'hey', 'hi ', 'hello', 'good morning', 'good night', 'good evening',
+      'how are you', 'whats up', 'what\'s up', 'how\'s it going',
+      'anyone home', 'i\'m home', 'im home', 'heading out',
+      'on my way', 'be back', 'brb', 'gtg', 'lol', 'lmao', 'haha',
+      'thanks', 'thank you', 'ok', 'okay', 'sure', 'sounds good',
+      'love you', 'miss you', 'see you', 'bye', 'later',
+    ];
+
+    for (var phrase in casualPhrases) {
+      if (lowerMessage.startsWith(phrase) ||
+          lowerMessage == phrase ||
+          (lowerMessage.length < 30 && lowerMessage.contains(phrase))) {
+        print('Task detection: Rejected (casual phrase: "$phrase") - "$trimmedMessage"');
+        return null; // Casual chat, not a task
+      }
+    }
+
+    // Filter 3: Must contain task-like action verbs
     final hasTaskVerb = _taskVerbs.any((verb) =>
       lowerMessage.contains(verb) ||
       lowerMessage.contains('$verb ') ||
@@ -40,8 +66,42 @@ class SimpleTaskDetector {
     );
 
     if (!hasTaskVerb) {
+      print('Task detection: Rejected (no action verb) - "$trimmedMessage"');
       return null; // Not a task
     }
+
+    // Filter 4: Must contain request indicators
+    final requestIndicators = [
+      'can someone', 'could someone', 'anyone', 'someone',
+      'please', 'need to', 'needs to', 'should',
+      'can you', 'could you', 'would you', 'will you',
+      'reminder', 'don\'t forget', 'remember to',
+    ];
+
+    final hasRequestIndicator = requestIndicators.any((indicator) =>
+      lowerMessage.contains(indicator)
+    );
+
+    // Filter 5: Or must directly address someone by name
+    bool directlyAddressed = false;
+    for (var member in houseMembers) {
+      final memberName = member['name']!.toLowerCase();
+      final firstName = memberName.split(' ').first;
+
+      if (lowerMessage.startsWith('$firstName,') ||
+          lowerMessage.startsWith('$memberName,')) {
+        directlyAddressed = true;
+        break;
+      }
+    }
+
+    // Must have either a request indicator OR be directly addressed
+    if (!hasRequestIndicator && !directlyAddressed) {
+      print('Task detection: Rejected (no request indicator or direct address) - "$trimmedMessage"');
+      return null; // Just a statement, not a task request
+    }
+
+    print('Task detection: ACCEPTED as task - "$trimmedMessage"');
 
     // Extract assigned person by checking for house member names
     String? assignedTo;

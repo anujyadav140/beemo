@@ -4,6 +4,7 @@ import 'add_agenda_screen.dart';
 import 'agenda_detail_screen.dart';
 import 'package:intl/intl.dart';
 import '../providers/house_provider.dart';
+import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/agenda_item_model.dart';
 
@@ -326,6 +327,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         return StreamBuilder<List<AgendaItem>>(
                           stream: _firestoreService.getAgendaItemsStream(houseProvider.currentHouseId!),
                           builder: (context, snapshot) {
+                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                            final currentUserId = authProvider.user?.uid;
+
                             if (snapshot.connectionState == ConnectionState.waiting) {
                               return const Center(
                                 child: CircularProgressIndicator(
@@ -348,6 +352,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
                             // Filter items from this week
                             final thisWeekItems = snapshot.data!
                                 .where((item) => _isThisWeek(item.createdAt))
+                                .where((item) =>
+                                    item.priority != 'meeting' ||
+                                    (currentUserId != null && item.createdBy == currentUserId))
                                 .toList();
 
                             if (thisWeekItems.isEmpty) {
@@ -382,13 +389,19 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         return StreamBuilder<List<AgendaItem>>(
                           stream: _firestoreService.getAgendaItemsStream(houseProvider.currentHouseId!),
                           builder: (context, snapshot) {
+                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                            final currentUserId = authProvider.user?.uid;
+
                             if (!snapshot.hasData || snapshot.data!.isEmpty) {
                               return const SizedBox.shrink();
                             }
 
                             // Filter items NOT from this week
                             final recentItems = snapshot.data!
-                                .where((item) => !_isThisWeek(item.createdAt))
+                                .where((item) =>
+                                    !_isThisWeek(item.createdAt) &&
+                                    (item.priority != 'meeting' ||
+                                        (currentUserId != null && item.createdBy == currentUserId)))
                                 .take(5)
                                 .toList();
 

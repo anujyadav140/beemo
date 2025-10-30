@@ -35,6 +35,14 @@ class House {
     // Handle members as either Map or List from Firestore
     Map<String, HouseMember> parsedMembers = {};
     final membersData = data['members'];
+    final topLevelName = data['houseName'];
+    String resolvedName = 'The Lab';
+    final infoName = info['name'];
+    if (infoName is String && infoName.trim().isNotEmpty) {
+      resolvedName = infoName.trim();
+    } else if (topLevelName is String && topLevelName.trim().isNotEmpty) {
+      resolvedName = topLevelName.trim();
+    }
 
     if (membersData is Map) {
       // If members is a Map, convert it
@@ -53,7 +61,7 @@ class House {
 
     return House(
       id: doc.id,
-      name: info['name'] ?? 'The Lab',
+      name: resolvedName,
       bedrooms: info['bedrooms'] ?? 0,
       bathrooms: info['bathrooms'] ?? 0,
       createdAt: (info['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),

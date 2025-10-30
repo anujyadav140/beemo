@@ -19,7 +19,11 @@
       "Bash(cat -A)",
       "Bash(flutter run)",
       "Bash(dart format:*)",
-      "Bash(flutter devices:*)"
+      "Bash(flutter devices:*)",
+      "Bash(dart analyze:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(dart compile:*)",
+      "Bash(nc:*)"
     ],
     "deny": [],
     "ask": []

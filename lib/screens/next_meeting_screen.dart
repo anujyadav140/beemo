@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../providers/house_provider.dart';
 import 'agenda_screen.dart';
 import 'setup_house_screen.dart';
@@ -15,7 +16,8 @@ class NextMeetingScreen extends StatefulWidget {
 
 class _NextMeetingScreenState extends State<NextMeetingScreen> {
   Timer? _timer;
-  Duration _timeRemaining = const Duration(days: 3, hours: 20, minutes: 12, seconds: 28);
+  Duration _timeRemaining = Duration.zero;
+  DateTime? _scheduledTime;
 
   @override
   void initState() {
@@ -31,13 +33,15 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          if (_timeRemaining.inSeconds > 0) {
-            _timeRemaining = _timeRemaining - const Duration(seconds: 1);
-          }
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        if (_scheduledTime != null) {
+          final diff = _scheduledTime!.difference(DateTime.now());
+          _timeRemaining = diff.isNegative ? Duration.zero : diff;
+        } else {
+          _timeRemaining = Duration.zero;
+        }
+      });
     });
   }
 
@@ -220,20 +224,136 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
 
-                // Countdown boxes
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildCountdownBox(days.toString().padLeft(2, '0'), 'Days'),
-                      _buildCountdownBox(hours.toString().padLeft(2, '0'), 'Hours'),
-                      _buildCountdownBox(minutes.toString().padLeft(2, '0'), 'Minutes'),
-                      _buildCountdownBox(seconds.toString().padLeft(2, '0'), 'Seconds'),
-                    ],
-                  ),
+                StreamBuilder<DocumentSnapshot>(
+                  stream: houseId != null
+                      ? FirebaseFirestore.instance
+                          .collection('nextMeetings')
+                          .doc(houseId)
+                          .snapshots()
+                      : null,
+                  builder: (context, snapshot) {
+                    DateTime? meetingTime;
+
+                    if (snapshot.hasData &&
+                        snapshot.data != null &&
+                        snapshot.data!.exists) {
+                      final data =
+                          snapshot.data!.data() as Map<String, dynamic>?;
+                      final ts = data?['scheduledTime'] as Timestamp?;
+                      if (ts != null) {
+                        meetingTime = ts.toDate();
+                      }
+                    }
+
+                    if (meetingTime != _scheduledTime) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        setState(() {
+                          _scheduledTime = meetingTime;
+                          if (meetingTime != null) {
+                            final diff = meetingTime.difference(DateTime.now());
+                            _timeRemaining = diff.isNegative ? Duration.zero : diff;
+                          } else {
+                            _timeRemaining = Duration.zero;
+                          }
+                        });
+                      });
+                    }
+
+                    final hasMeeting = meetingTime != null;
+                    final scheduleLabel = hasMeeting
+                        ? DateFormat('EEEE, MMM d • h:mm a')
+                            .format(meetingTime!.toLocal())
+                        : 'No weekly check-in is on the calendar yet.';
+                    final helperText = hasMeeting
+                        ? 'Recurring check-in coordinated with Beemo.'
+                        : 'Open the Beemo chat to pick a time that works for everyone.';
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 20.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                scheduleLabel,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                helperText,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white70,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        if (hasMeeting)
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 20.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _buildCountdownBox(
+                                  days.toString().padLeft(2, '0'),
+                                  'Days',
+                                ),
+                                _buildCountdownBox(
+                                  hours.toString().padLeft(2, '0'),
+                                  'Hours',
+                                ),
+                                _buildCountdownBox(
+                                  minutes.toString().padLeft(2, '0'),
+                                  'Minutes',
+                                ),
+                                _buildCountdownBox(
+                                  seconds.toString().padLeft(2, '0'),
+                                  'Seconds',
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 20.0),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.35),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white24,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: const Text(
+                                'No countdown yet—ask Beemo in the group chat to schedule your next weekly check-in.',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
 
                 const Spacer(),

@@ -21,7 +21,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       subtitle: 'Your AI-powered household\ncoordination assistant',
       emoji: '🤖',
       backgroundColor: AppColors.yellow,
-      description: 'Beemo helps you manage tasks, meetings, and household coordination with smart AI assistance.',
+      description: 'Beemo helps you manage tasks, meetings, and household coordination with smart AI assistance—including automated weekly meeting check-ins.',
       showBeemoCharacter: true,
     ),
     OnboardingPage(
@@ -49,23 +49,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ],
     ),
     OnboardingPage(
-      title: 'Stay\nOrganized',
-      subtitle: 'Meeting notes, agendas,\nand more',
-      emoji: '📝',
-      backgroundColor: const Color(0xFF9B59B6),
-      description: 'Keep track of meeting notes, create agendas, and schedule your next household meeting effortlessly.',
-      features: [
-        'Shared meeting notes',
-        'Collaborative agendas',
-        'Activity tracking',
-      ],
+      title: 'Share what’s\non your mind',
+      subtitle: '',
+      emoji: '🗒️',
+      backgroundColor: AppColors.pink,
+      description:
+          'Each week, add one topic you’d like to talk about—a small concern, idea, or task. Beemo helps turn these into calm, fair discussions.',
     ),
     OnboardingPage(
-      title: 'Ready to\nStart?',
-      subtitle: 'Join or create your\nhousehold',
-      emoji: '🏠',
-      backgroundColor: const Color(0xFF2ECC71),
-      description: 'Set up your household and invite your housemates to start coordinating better together.',
+      title: 'Earn &\nDecorate',
+      subtitle: '',
+      emoji: '🏡',
+      backgroundColor: AppColors.pink,
+      description:
+          'Good habits unlock fun decorations for your virtual house. It’s for teamwork, not competition.',
       isLastPage: true,
     ),
   ];
@@ -136,34 +133,32 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
 
             // Top Skip button
-            if (_currentPage < _pages.length - 1)
-              Positioned(
-                top: 20,
-                right: 20,
-                child: GestureDetector(
-                  onTap: _completeOnboarding,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.transparent,
-                      border: Border.all(color: Colors.black, width: 2.5),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'Skip',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black,
-                      ),
+            Positioned(
+              top: 20,
+              right: 20,
+              child: GestureDetector(
+                onTap: _completeOnboarding,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    border: Border.all(color: Colors.black, width: 2.5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Skip',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
                     ),
                   ),
                 ),
               ),
-
+            ),
             // Bottom navigation
             Positioned(
               bottom: 40,
@@ -194,7 +189,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       // Next/Get Started Button
                       _buildNeobrutalistButton(
                         text: _currentPage == _pages.length - 1
-                            ? 'Get Started'
+                            ? 'Finish'
                             : 'Next',
                         backgroundColor: _pages[_currentPage].backgroundColor,
                         textColor: Colors.white,

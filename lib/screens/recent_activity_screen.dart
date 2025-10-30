@@ -46,19 +46,67 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
     }
   }
 
-  Widget _getActivityBadge(Activity activity) {
+  Widget _getActivityBadge(Activity activity, String? currentUserId) {
     switch (activity.type) {
       case 'task_completed':
+        // Task completion needs confirmation from others
+        // Check if already confirmed by checking metadata
+        final isConfirmed = activity.metadata['confirmed'] == true;
+
+        if (isConfirmed) {
+          // Task already confirmed - show "Confirmed" state
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.black, width: 2),
+            ),
+            child: const Text(
+              'Confirmed',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          );
+        }
+
+        // Not confirmed yet - check if current user can confirm
+        final completedBy = activity.metadata['completedBy']?.toString();
+        final isMyTask = currentUserId != null &&
+                        completedBy != null &&
+                        completedBy.isNotEmpty &&
+                        completedBy == currentUserId;
+        final canConfirm = currentUserId != null &&
+                          completedBy != null &&
+                          completedBy.isNotEmpty &&
+                          completedBy != currentUserId;
+
+        String buttonText;
+        Color buttonColor;
+        if (isMyTask) {
+          buttonText = 'Awaiting review';
+          buttonColor = const Color(0xFF16A3D0);
+        } else if (canConfirm) {
+          buttonText = 'Confirm';
+          buttonColor = const Color(0xFFFF4D8D);
+        } else {
+          buttonText = 'Confirmed';
+          buttonColor = Colors.black;
+        }
+
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.black,
+            color: buttonColor,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.black, width: 2),
           ),
-          child: const Text(
-            'Completed',
-            style: TextStyle(
+          child: Text(
+            buttonText,
+            style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: Colors.white,
@@ -66,22 +114,46 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
           ),
         );
       case 'task_created':
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFF4D8D),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.black, width: 2),
-          ),
-          child: const Text(
-            'Confirm',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+        // Task assignment - show Beemo icon if assigned by AI, otherwise show assignment icon
+        final isAIAssignment = activity.title.contains('(AI)') ||
+                                activity.description.contains('Beemo') ||
+                                activity.createdBy == 'ai_agent';
+        if (isAIAssignment) {
+          // Beemo icon for AI assignments
+          return Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFC400),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.black, width: 2),
             ),
-          ),
-        );
+            child: const Center(
+              child: Text(
+                '🤖',
+                style: TextStyle(fontSize: 20),
+              ),
+            ),
+          );
+        } else {
+          // Regular assignment icon
+          return Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF63BDA4),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.black, width: 2),
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.assignment_turned_in,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          );
+        }
       case 'message':
       case 'agenda_created':
         return Container(
@@ -107,6 +179,8 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
   @override
   Widget build(BuildContext context) {
     final houseProvider = Provider.of<HouseProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context);
+    final currentUserId = authProvider.user?.uid;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -220,7 +294,9 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
                                     padding: const EdgeInsets.only(bottom: 12),
                                     child: _ActivityCard(
                                       activity: activity,
-                                      badge: _getActivityBadge(activity),
+                                      badge: _getActivityBadge(activity, currentUserId),
+                                      currentUserId: currentUserId,
+                                      firestoreService: _firestoreService,
                                     ),
                                   );
                                 }).toList(),
@@ -321,10 +397,14 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
 class _ActivityCard extends StatefulWidget {
   final Activity activity;
   final Widget badge;
+  final String? currentUserId;
+  final FirestoreService firestoreService;
 
   const _ActivityCard({
     required this.activity,
     required this.badge,
+    this.currentUserId,
+    required this.firestoreService,
   });
 
   @override
@@ -334,6 +414,61 @@ class _ActivityCard extends StatefulWidget {
 class _ActivityCardState extends State<_ActivityCard> {
   bool _isPressed = false;
 
+  Future<void> _handleConfirmTap() async {
+    // Check if this is a task completion activity
+    if (widget.activity.type != 'task_completed') {
+      return;
+    }
+
+    final taskId = widget.activity.metadata['taskId']?.toString();
+    final completedBy = widget.activity.metadata['completedBy']?.toString();
+
+    if (taskId == null || taskId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task ID not found')),
+      );
+      return;
+    }
+
+    // Prevent self-confirmation
+    if (widget.currentUserId == null ||
+        completedBy == null ||
+        completedBy.isEmpty ||
+        completedBy == widget.currentUserId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You cannot confirm your own task'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Confirm the task
+    try {
+      // updateTaskStatus will handle both task update AND activity update
+      await widget.firestoreService.updateTaskStatus(taskId, 'completed');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Task confirmed successfully!'),
+            backgroundColor: Color(0xFF63BDA4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error confirming task: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -342,11 +477,12 @@ class _ActivityCardState extends State<_ActivityCard> {
           _isPressed = true;
         });
       },
-      onTapUp: (_) {
+      onTapUp: (_) async {
         setState(() {
           _isPressed = false;
         });
-        // TODO: Navigate to detail page or perform action
+        // Handle confirmation for task completion activities
+        await _handleConfirmTap();
       },
       onTapCancel: () {
         setState(() {

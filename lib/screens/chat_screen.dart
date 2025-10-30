@@ -1,12 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../services/ai_service.dart';
 import '../services/simple_task_detector.dart';
 import '../models/chat_message_model.dart';
+
+class _ChatHeaderData {
+  const _ChatHeaderData({
+    required this.houseData,
+    required this.memberDocs,
+  });
+
+  final Map<String, dynamic>? houseData;
+  final List<DocumentSnapshot<Map<String, dynamic>>> memberDocs;
+}
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -21,6 +35,20 @@ class _ChatScreenState extends State<ChatScreen> {
   final FocusNode _focusNode = FocusNode();
   final FirestoreService _firestoreService = FirestoreService();
   final AIService _aiService = AIService();
+  bool _isSchedulingMeeting = false;
+  bool _isProcessingFollowUp = false;
+  bool _autoCheckInEnabled = true;
+  bool _isAutoSettingsLoading = true;
+  bool _isUpdatingAutoSetting = false;
+  DateTime? _lastAutoPromptAt;
+  StreamSubscription<Map<String, dynamic>>? _autoMeetingSettingsSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      _autoAssignCountdownSubscription;
+  Timer? _countdownTimer;
+  String? _countdownHouseId;
+  final Map<String, DateTime> _assignmentDeadlines = {};
+  final Map<String, String> _assignmentCountdowns = {};
+  String? _autoCheckInCountdownLabel;
 
   @override
   void initState() {
@@ -30,6 +58,28 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       }
     });
+    _subscribeToAutoMeetingSettings();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final houseProvider = Provider.of<HouseProvider>(context);
+    final newHouseId = houseProvider.currentHouseId;
+    if (_countdownHouseId == newHouseId) {
+      return;
+    }
+
+    _countdownHouseId = newHouseId;
+    _autoAssignCountdownSubscription?.cancel();
+    _autoAssignCountdownSubscription = null;
+    _assignmentDeadlines.clear();
+    _assignmentCountdowns.clear();
+    _refreshCountdownLabels();
+
+    if (newHouseId != null) {
+      _subscribeToTaskAssignmentCountdown(newHouseId);
+    }
   }
 
   @override
@@ -37,6 +87,9 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
+    _autoMeetingSettingsSubscription?.cancel();
+    _autoAssignCountdownSubscription?.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -50,6 +103,680 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
     });
+  }
+
+  Future<List<DocumentSnapshot<Map<String, dynamic>>>> _fetchMemberDocs(
+    Map<String, dynamic>? houseData,
+    HouseProvider houseProvider, {
+    String? currentUserId,
+  }) async {
+    final memberIds =
+        _resolveMemberIds(houseData, houseProvider, currentUserId: currentUserId);
+    if (memberIds.isEmpty) {
+      return [];
+    }
+    final futures = memberIds
+        .map((memberId) => FirebaseFirestore.instance.collection('users').doc(memberId).get());
+    return Future.wait(futures);
+  }
+
+  List<String> _resolveMemberIds(
+    Map<String, dynamic>? houseData,
+    HouseProvider houseProvider, {
+    String? currentUserId,
+  }) {
+    final ids = <String>{};
+    final membersField = houseData?['members'];
+
+    if (membersField is Map) {
+      ids.addAll(membersField.keys.map((e) => e.toString()));
+    } else if (membersField is List) {
+      for (final entry in membersField) {
+        if (entry is String) {
+          ids.add(entry);
+        } else if (entry is Map) {
+          final idValue = entry['id']?.toString();
+          if (idValue != null && idValue.isNotEmpty) {
+            ids.add(idValue);
+          }
+        }
+      }
+    }
+
+    final providerMembers = houseProvider.currentHouse?.members;
+    if (providerMembers != null) {
+      ids.addAll(providerMembers.keys);
+    }
+
+    if (currentUserId != null && currentUserId.isNotEmpty) {
+      ids.add(currentUserId);
+    }
+
+    ids.removeWhere((element) => element.trim().isEmpty);
+    return ids.toList();
+  }
+
+  List<String> _extractMemberNamesFromDocs(
+    List<DocumentSnapshot<Map<String, dynamic>>> docs,
+    HouseProvider houseProvider,
+  ) {
+    final names = <String>{};
+    for (final doc in docs) {
+      final data = doc.data();
+      if (data == null) continue;
+
+      final profile = data['profile'] as Map<String, dynamic>?;
+      final candidates = [
+        profile?['name'],
+        data['displayName'],
+        data['name'],
+        (data['email'] is String)
+            ? (data['email'] as String).split('@').first
+            : null,
+      ];
+
+      for (final value in candidates) {
+        if (value is String && value.trim().isNotEmpty) {
+          names.add(value.trim());
+          break;
+        }
+      }
+    }
+
+    if (names.isEmpty) {
+      final members = houseProvider.currentHouse?.members.values;
+      if (members != null) {
+        for (final member in members) {
+          final name = member.name.trim();
+          if (name.isNotEmpty) names.add(name);
+        }
+      }
+    }
+
+    final sorted = names.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
+  String _formatMemberNameList(List<String> names) {
+    if (names.isEmpty) return 'Beemo';
+    if (names.length <= 3) {
+      return '${names.join(', ')} & Beemo';
+    }
+    final displayed = names.take(3).join(', ');
+    return '$displayed +${names.length - 3} more & Beemo';
+  }
+
+  String _extractHouseName(
+    Map<String, dynamic>? houseData,
+    HouseProvider houseProvider, {
+    String fallback = 'House',
+  }) {
+    final providerName = houseProvider.currentHouse?.name;
+    if (providerName != null && providerName.trim().isNotEmpty) {
+      return providerName.trim();
+    }
+
+    if (houseData != null) {
+      final info = houseData['info'];
+      if (info is Map<String, dynamic>) {
+        final infoName = info['name'];
+        if (infoName is String && infoName.trim().isNotEmpty) {
+          return infoName.trim();
+        }
+      }
+
+      final docName = houseData['houseName'];
+      if (docName is String && docName.trim().isNotEmpty) {
+        return docName.trim();
+      }
+    }
+
+    return fallback;
+  }
+
+  void _subscribeToAutoMeetingSettings() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+      final houseId = houseProvider.currentHouseId;
+      if (houseId == null) {
+        if (mounted) {
+          setState(() {
+            _isAutoSettingsLoading = false;
+          });
+        }
+        return;
+      }
+
+      _autoMeetingSettingsSubscription?.cancel();
+      _autoMeetingSettingsSubscription =
+          _firestoreService.autoMeetingSettingsStream(houseId).listen((settings) {
+        final enabled = settings.containsKey('autoWeeklyCheckInEnabled')
+            ? (settings['autoWeeklyCheckInEnabled'] ?? false) == true
+            : true;
+        final rawLastPrompt = settings['lastAutoPromptAt'];
+        DateTime? lastPrompt;
+        if (rawLastPrompt is Timestamp) {
+          lastPrompt = rawLastPrompt.toDate();
+        } else if (rawLastPrompt is DateTime) {
+          lastPrompt = rawLastPrompt;
+        }
+
+        if (mounted) {
+          setState(() {
+            _autoCheckInEnabled = enabled;
+            _lastAutoPromptAt = lastPrompt;
+            _isAutoSettingsLoading = false;
+            _isUpdatingAutoSetting = false;
+          });
+        }
+
+        _maybeTriggerAutoCheckIn();
+        _refreshCountdownLabels();
+      });
+    });
+  }
+
+  Future<void> _maybeTriggerAutoCheckIn() async {
+    if (!_autoCheckInEnabled) return;
+
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+    if (houseId == null || _isSchedulingMeeting) {
+      return;
+    }
+
+    final now = DateTime.now();
+    // Midweek check-in: Wednesday (3) or Thursday (4)
+    if (now.weekday < DateTime.wednesday || now.weekday > DateTime.thursday) {
+      return;
+    }
+
+    if (_lastAutoPromptAt != null && _isSameWeek(now, _lastAutoPromptAt!)) {
+      return;
+    }
+
+    final success = await _startWeeklyCheckInMeeting(autoTriggered: true);
+    if (success) {
+      await _firestoreService.updateAutoMeetingSettings(
+        houseId,
+        lastPromptAt: DateTime.now(),
+      );
+    }
+  }
+
+  bool _isSameWeek(DateTime a, DateTime b) {
+    DateTime startOfWeek(DateTime dt) {
+      final normalized = DateTime(dt.year, dt.month, dt.day);
+      return normalized.subtract(Duration(days: normalized.weekday - 1));
+    }
+
+    final aStart = startOfWeek(a);
+    final bStart = startOfWeek(b);
+    return aStart.year == bStart.year &&
+        aStart.month == bStart.month &&
+        aStart.day == bStart.day;
+  }
+
+  Future<void> _toggleAutoCheckIn(bool value) async {
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+    if (houseId == null) {
+      return;
+    }
+
+    final previousEnabled = _autoCheckInEnabled;
+    if (mounted) {
+      setState(() {
+        _isUpdatingAutoSetting = true;
+        _autoCheckInEnabled = value;
+      });
+      _refreshCountdownLabels();
+    }
+
+    try {
+      await _firestoreService.updateAutoMeetingSettings(
+        houseId,
+        enabled: value,
+        clearLastPrompt: value && !previousEnabled,
+      );
+      _refreshCountdownLabels();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isUpdatingAutoSetting = false;
+          _autoCheckInEnabled = previousEnabled;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not update auto check-in: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      _refreshCountdownLabels();
+    }
+  }
+
+  Future<bool> _startWeeklyCheckInMeeting({bool autoTriggered = false}) async {
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+
+    if (houseId == null) {
+      return false;
+    }
+
+    if (_isSchedulingMeeting) {
+      return false;
+    }
+
+    if (autoTriggered) {
+      _isSchedulingMeeting = true;
+    } else {
+      setState(() {
+        _isSchedulingMeeting = true;
+      });
+    }
+
+    try {
+      await _firestoreService.clearMeetingPlanningSession(houseId);
+      final houseDoc =
+          await FirebaseFirestore.instance.collection('houses').doc(houseId).get();
+      final houseData = houseDoc.data() as Map<String, dynamic>?;
+      final houseName = _extractHouseName(
+        houseData,
+        houseProvider,
+        fallback: houseProvider.currentHouse?.name ?? 'our house',
+      );
+
+      final members = await _firestoreService.getHouseMembers(houseId);
+      final recentMessages =
+          await _firestoreService.fetchRecentChatMessages(houseId, limit: 20);
+      final lastMeeting = await _firestoreService.getNextMeetingTimeOnce(houseId);
+
+      final plan = await _aiService.planWeeklyCheckInMeeting(
+        houseName: houseName,
+        members: members,
+        recentMessages: recentMessages,
+        lastScheduledTime: lastMeeting,
+      );
+
+      if (plan.messages.isEmpty) {
+        await _firestoreService.sendBeemoMessage(
+          houseId: houseId,
+          message:
+              'I need a bit more context before I can lock in a time. Share when you\'re free and I\'ll try again!',
+        );
+      } else {
+        for (final message in plan.messages) {
+          await _firestoreService.sendBeemoMessage(
+            houseId: houseId,
+            message: message,
+          );
+        }
+      }
+
+      if (plan.shouldSchedule && plan.scheduledTime != null) {
+        final scheduledUtc = plan.scheduledTime!;
+        await _firestoreService.scheduleNextMeeting(
+          houseId: houseId,
+          scheduledTime: scheduledUtc,
+          recurring: true,
+        );
+
+        final displayTime = scheduledUtc.toLocal();
+        final fallbackSummary =
+            DateFormat('EEEE, MMM d • h:mm a').format(displayTime);
+        final summary = plan.scheduledSummary ?? 'Weekly check-in penciled in for $fallbackSummary';
+        final alreadySummarized = plan.messages.any(
+          (m) => plan.scheduledSummary != null
+              ? m.toLowerCase().contains(plan.scheduledSummary!.toLowerCase())
+              : m.toLowerCase().contains(fallbackSummary.toLowerCase()),
+        );
+        if (!alreadySummarized) {
+          await _firestoreService.sendBeemoMessage(
+            houseId: houseId,
+            message:
+                '$summary. I updated the Next Meeting card—tap it anytime if we need to adjust.',
+          );
+        }
+        await _firestoreService.clearMeetingPlanningSession(houseId);
+      } else {
+        await _firestoreService.upsertMeetingPlanningSession(houseId, {
+          'active': true,
+          'mode': 'weekly_check_in',
+          'houseName': houseName,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'lastAssistantMessageAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      _scrollToBottom();
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Beemo hit a snag scheduling the meeting: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return false;
+    } finally {
+      if (autoTriggered) {
+        _isSchedulingMeeting = false;
+      } else if (mounted) {
+        setState(() {
+          _isSchedulingMeeting = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildAutoMeetingToggle() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.event_repeat,
+            color: Colors.white,
+            size: 18,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Auto weekly check-in',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Midweek reminder to confirm the next meeting.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.black54,
+                ),
+              ),
+              if (_autoCheckInCountdownLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    _autoCheckInCountdownLabel!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        if (_isAutoSettingsLoading || _isUpdatingAutoSetting)
+          const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+            ),
+          )
+        else
+          Switch.adaptive(
+            value: _autoCheckInEnabled,
+            onChanged: (value) => _toggleAutoCheckIn(value),
+            activeColor: Colors.black,
+            activeTrackColor: const Color(0xFFFFC400),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildChatHeaderBar({
+    required String title,
+    required String subtitle,
+    required bool menuEnabled,
+    bool subtleMenu = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFEC5D),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: const Icon(
+              Icons.arrow_back,
+              color: Colors.black,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 39,
+            height: 39,
+            decoration: BoxDecoration(
+              color: Colors.grey[700],
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.public,
+              color: Colors.white70,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.black,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.black.withOpacity(0.8),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _buildMeetingMenuButton(
+            enabled: menuEnabled,
+            subtle: subtleMenu,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMemberAvatarRow(
+    List<DocumentSnapshot<Map<String, dynamic>>> memberDocs,
+  ) {
+    final avatarWidgets = <Widget>[];
+    final seenIds = <String>{};
+    var index = 0;
+
+    for (final doc in memberDocs) {
+      if (!doc.exists) continue;
+      if (!seenIds.add(doc.id)) continue;
+      if (index >= 5) break;
+
+      final data = doc.data();
+      final profile = data?['profile'] as Map<String, dynamic>?;
+      final avatarEmoji = profile?['avatarEmoji']?.toString() ?? '?';
+      final avatarColorValue = profile?['avatarColor'];
+
+      Color color = const Color(0xFFFF4D6D);
+      if (avatarColorValue is int) {
+        color = Color(avatarColorValue);
+      }
+
+      avatarWidgets.add(
+        Positioned(
+          left: index * 14.0,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.black, width: 2),
+            ),
+            child: Center(
+              child: Text(
+                avatarEmoji,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+        ),
+      );
+      index++;
+    }
+
+    avatarWidgets.add(
+      Positioned(
+        left: index * 14.0,
+        child: _buildBeemoAvatar(),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: SizedBox(
+        height: 24,
+        child: Stack(children: avatarWidgets),
+      ),
+    );
+  }
+
+  Widget _buildMeetingMenuButton({required bool enabled, bool subtle = false}) {
+    final effectiveEnabled =
+        enabled && !_isUpdatingAutoSetting && !_isAutoSettingsLoading;
+    final outerColor = subtle ? Colors.black12 : Colors.black;
+    final innerBorderColor = subtle ? Colors.black26 : Colors.black;
+    final iconColor = subtle ? Colors.black45 : Colors.black;
+    final opacity = effectiveEnabled ? 1.0 : 0.6;
+
+    return GestureDetector(
+      onTap: effectiveEnabled ? _showAutoMeetingMenu : null,
+      child: Opacity(
+        opacity: opacity,
+        child: Container(
+          decoration: BoxDecoration(
+            color: outerColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.all(2),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: innerBorderColor, width: 2),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Icon(
+              Icons.more_horiz,
+              color: iconColor,
+              size: 18,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAutoMeetingMenu() {
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    if (houseProvider.currentHouseId == null) {
+      return;
+    }
+
+    if (_isAutoSettingsLoading) {
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.black, width: 3),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Meeting assistant',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildAutoMeetingToggle(),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _sendMessage() async {
@@ -90,24 +817,45 @@ class _ChatScreenState extends State<ChatScreen> {
       senderColor: '#$userColor',
     );
 
-    _messageController.clear();
-    _scrollToBottom();
-
-    // AI-powered task detection
-    // Analyze the message in the background to detect if it contains a task
-    _analyzeMessageForTask(
+    final handledByAssignmentFlow = await _processAssignmentReply(
       messageText,
+      authProvider.user!.uid,
       userName,
       houseProvider.currentHouseId!,
     );
+
+    _messageController.clear();
+    _scrollToBottom();
+    unawaited(_processMeetingAssistantFollowUp());
+
+    // AI-powered task detection
+    // Skip detection when Beemo already processed this message for assignments.
+    if (!handledByAssignmentFlow) {
+      _analyzeMessageForTask(
+        messageText,
+        authProvider.user!.uid,
+        userName,
+        houseProvider.currentHouseId!,
+      );
+    }
   }
 
   Future<void> _analyzeMessageForTask(
     String message,
+    String senderId,
     String senderName,
     String houseId,
   ) async {
     try {
+      final lower = message.toLowerCase().trim();
+      if (_isVolunteerMessage(lower) ||
+          _isAssignCommand(lower) ||
+          _isAffirmativeMessage(lower) ||
+          _isNegativeMessage(lower) ||
+          _isPassMessage(lower)) {
+        return;
+      }
+
       // Get house members for context
       final members = await _firestoreService.getHouseMembers(houseId);
 
@@ -118,17 +866,20 @@ class _ChatScreenState extends State<ChatScreen> {
       final simpleTask = SimpleTaskDetector.detectTask(message, members);
 
       if (simpleTask != null && simpleTask.isTask) {
-        // Simple detector found a task! Create it immediately
-        await _firestoreService.createTaskFromAI(
+        final title = (simpleTask.title ?? message).trim();
+        final description = (simpleTask.description?.trim().isNotEmpty ?? false)
+            ? simpleTask.description!.trim()
+            : message;
+
+        await _firestoreService.startChatTaskSession(
           houseId: houseId,
-          title: simpleTask.title!,
-          description: simpleTask.description!,
-          assignedTo: simpleTask.assignedTo,
-          assignedToName: simpleTask.assignedToName,
-          dueDate: simpleTask.dueDate,
+          title: title.isNotEmpty ? title : 'Task',
+          description: description,
           sourceMessage: message,
+          requestedById: senderId,
+          requestedByName: senderName,
         );
-        print('✅ Task created via simple detection: ${simpleTask.title}');
+        print('🕒 Task session queued via simple detection: $title');
         return;
       }
 
@@ -144,27 +895,18 @@ class _ChatScreenState extends State<ChatScreen> {
             detectedTask.title != null &&
             detectedTask.description != null) {
 
-          // Get the assigned user's name if we have an ID
-          String? assignedToName;
-          if (detectedTask.assignedTo != null) {
-            final assignedMember = members.firstWhere(
-              (m) => m['id'] == detectedTask.assignedTo,
-              orElse: () => {'name': 'Unknown'},
-            );
-            assignedToName = assignedMember['name'];
-          }
+          final title = detectedTask.title!.trim();
+          final description = detectedTask.description!.trim();
 
-          // Create the task
-          await _firestoreService.createTaskFromAI(
+          await _firestoreService.startChatTaskSession(
             houseId: houseId,
-            title: detectedTask.title!,
-            description: detectedTask.description!,
-            assignedTo: detectedTask.assignedTo,
-            assignedToName: assignedToName,
-            dueDate: detectedTask.dueDate,
+            title: title.isNotEmpty ? title : 'Task',
+            description: description.isNotEmpty ? description : message,
             sourceMessage: message,
+            requestedById: senderId,
+            requestedByName: senderName,
           );
-          print('✅ Task created via AI detection: ${detectedTask.title}');
+          print('🕒 Task session queued via AI detection: $title');
         }
       } catch (aiError) {
         print('AI detection failed (API might not be enabled): $aiError');
@@ -176,10 +918,314 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<bool> _processAssignmentReply(
+    String message,
+    String senderId,
+    String senderName,
+    String houseId,
+  ) async {
+    final lowerMessage = message.toLowerCase().trim();
+
+    try {
+      final session = await _firestoreService.getActiveTaskAssignmentSession(houseId);
+      if (session == null) {
+        return false;
+      }
+
+      final sessionId = session['id']?.toString();
+      final status = session['status']?.toString() ?? '';
+      if (sessionId == null || sessionId.isEmpty) {
+        return false;
+      }
+
+      if (_isVolunteerMessage(lowerMessage)) {
+        await _firestoreService.finalizeAssignmentFromVolunteer(
+          houseId: houseId,
+          sessionData: session,
+          volunteerId: senderId,
+          volunteerName: senderName,
+        );
+        return true;
+      }
+
+      if (_isAssignCommand(lowerMessage)) {
+        await _firestoreService.proposeFairAssignment(
+          houseId: houseId,
+          sessionData: session,
+        );
+        return true;
+      }
+
+      if (status == 'awaiting_confirmation') {
+        if (_isAffirmativeMessage(lowerMessage)) {
+          await _firestoreService.finalizeProposedAssignment(
+            houseId: houseId,
+            sessionData: session,
+          );
+          return true;
+        }
+
+        if (_isNegativeMessage(lowerMessage)) {
+          await _firestoreService.resetAssignmentSession(
+            houseId: houseId,
+            sessionId: sessionId,
+          );
+          await _firestoreService.sendBeemoMessage(
+            houseId: houseId,
+            message:
+                'Okay! I\'ll keep this open for volunteers. Say \"Beemo assign\" when you want me to pick someone again.',
+          );
+          return true;
+        }
+      } else {
+        if (_isPassMessage(lowerMessage)) {
+          await _firestoreService.recordAssignmentPass(
+            houseId: houseId,
+            sessionId: sessionId,
+            userId: senderId,
+          );
+          return true;
+        }
+      }
+    } catch (e) {
+      print('Error processing assignment reply: $e');
+    }
+
+    return false;
+  }
+
+  Future<void> _processMeetingAssistantFollowUp() async {
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+
+    if (houseId == null || _isProcessingFollowUp) {
+      return;
+    }
+
+    final session =
+        await _firestoreService.getMeetingPlanningSession(houseId);
+    if (session == null || session['active'] != true) {
+      return;
+    }
+    if ((session['mode'] ?? 'weekly_check_in') != 'weekly_check_in') {
+      return;
+    }
+
+    _isProcessingFollowUp = true;
+    try {
+      String houseName = session['houseName']?.toString() ?? 'our house';
+      if (houseName == 'our house') {
+        final houseDoc = await FirebaseFirestore.instance
+            .collection('houses')
+            .doc(houseId)
+            .get();
+        houseName = houseDoc.data()?['houseName']?.toString() ?? houseName;
+      }
+
+      final members = await _firestoreService.getHouseMembers(houseId);
+      final conversation =
+          await _firestoreService.fetchRecentChatMessages(houseId, limit: 40);
+      final lastMeeting = await _firestoreService.getNextMeetingTimeOnce(houseId);
+
+      final plan = await _aiService.followUpWeeklyCheckIn(
+        houseName: houseName,
+        members: members,
+        recentMessages: conversation,
+        lastScheduledTime: lastMeeting,
+      );
+
+      if (plan.messages.isEmpty && !plan.shouldSchedule) {
+        await _firestoreService.upsertMeetingPlanningSession(houseId, {
+          'active': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      for (final message in plan.messages) {
+        await _firestoreService.sendBeemoMessage(
+          houseId: houseId,
+          message: message,
+        );
+      }
+
+      if (plan.shouldSchedule && plan.scheduledTime != null) {
+        final scheduledUtc = plan.scheduledTime!;
+        await _firestoreService.scheduleNextMeeting(
+          houseId: houseId,
+          scheduledTime: scheduledUtc,
+          recurring: true,
+        );
+
+        final displayTime = scheduledUtc.toLocal();
+        final fallbackSummary =
+            DateFormat('EEEE, MMM d • h:mm a').format(displayTime);
+        final summary = plan.scheduledSummary ??
+            '**Weekly check-in** locked for $fallbackSummary.';
+        final alreadySummarized = plan.messages.any(
+          (m) => plan.scheduledSummary != null
+              ? m.toLowerCase().contains(plan.scheduledSummary!.toLowerCase())
+              : m.toLowerCase().contains(fallbackSummary.toLowerCase()),
+        );
+        if (!alreadySummarized) {
+          await _firestoreService.sendBeemoMessage(
+            houseId: houseId,
+            message: summary,
+          );
+        }
+        await _firestoreService.clearMeetingPlanningSession(houseId);
+      } else {
+        final updateData = <String, dynamic>{
+          'active': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+        if (plan.messages.isNotEmpty) {
+          updateData['lastAssistantMessageAt'] = FieldValue.serverTimestamp();
+        }
+        await _firestoreService.upsertMeetingPlanningSession(houseId, updateData);
+      }
+
+      _scrollToBottom();
+    } catch (e) {
+      debugPrint('Beemo follow-up failed: $e');
+    } finally {
+      _isProcessingFollowUp = false;
+    }
+  }
+
+  bool _isVolunteerMessage(String message) {
+    final trimmed = message.trim();
+    if (trimmed.startsWith('i can ') ||
+        trimmed.startsWith('i will ') ||
+        trimmed.startsWith('ill ') ||
+        trimmed.startsWith("i'll ") ||
+        trimmed.startsWith('i got ') ||
+        trimmed.startsWith("i'm on it") ||
+        trimmed.startsWith('im on it')) {
+      return true;
+    }
+
+    return _containsAnyPhrase(message, [
+      'i\'ll take',
+      'ill take',
+      'i will take',
+      'i can take',
+      'i can do',
+      'i can help',
+      'i can handle',
+      'i will do',
+      'i\'ll do',
+      'ill do',
+      'i\'ll handle',
+      'ill handle',
+      'i can handle',
+      'i got it',
+      'i got this',
+      'count me in',
+      'i volunteer',
+      'i\'ll grab',
+      'ill grab',
+    ]);
+  }
+
+  bool _isAssignCommand(String message) {
+    return _containsAnyPhrase(message, [
+      'beemo assign',
+      'beemo decide',
+      'beemo choose',
+      'beemo pick',
+      'beemo handle it',
+    ]);
+  }
+
+  bool _isAffirmativeMessage(String message) {
+    return _containsAnyWord(message, [
+          'yes',
+          'yep',
+          'sure',
+          'ok',
+          'okay',
+          'yup',
+        ]) ||
+        _containsAnyPhrase(message, [
+          'sounds good',
+          'go for it',
+          'works for me',
+          'all good',
+        ]);
+  }
+
+  bool _isNegativeMessage(String message) {
+    return _containsAnyWord(message, [
+          'no',
+          'nah',
+          'wait',
+        ]) ||
+        _containsAnyPhrase(message, [
+          'hold on',
+          'not yet',
+          'someone else',
+          'maybe later',
+        ]);
+  }
+
+  bool _isPassMessage(String message) {
+    return _containsAnyWord(message, [
+          'pass',
+        ]) ||
+        _containsAnyPhrase(message, [
+          'not me',
+          'cant',
+          'can\'t',
+          'cannot',
+          'too busy',
+          'someone else should',
+        ]);
+  }
+
+  bool _containsAnyPhrase(String message, List<String> phrases) {
+    for (final phrase in phrases) {
+      if (message.contains(phrase)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _containsAnyWord(String message, List<String> words) {
+    for (final word in words) {
+      final pattern = RegExp('\\b${RegExp.escape(word)}\\b');
+      if (pattern.hasMatch(message)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final houseProvider = Provider.of<HouseProvider>(context);
     final houseId = houseProvider.currentHouseId;
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUserId = authProvider.user?.uid;
+    final Stream<_ChatHeaderData>? headerStream = houseId != null
+        ? FirebaseFirestore.instance
+            .collection('houses')
+            .doc(houseId)
+            .snapshots()
+            .asyncMap((houseDoc) async {
+              final houseData = houseDoc.data() as Map<String, dynamic>?;
+              final memberDocs = await _fetchMemberDocs(
+                houseData,
+                houseProvider,
+                currentUserId: currentUserId,
+              );
+              return _ChatHeaderData(
+                houseData: houseData,
+                memberDocs: memberDocs,
+              );
+            })
+        : null;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -204,239 +1250,66 @@ class _ChatScreenState extends State<ChatScreen> {
             Column(
               children: [
                 // Yellow header with house info
-                StreamBuilder<List<DocumentSnapshot>>(
-                  stream: houseId != null
-                      ? FirebaseFirestore.instance
-                          .collection('houses')
-                          .doc(houseId)
-                          .snapshots()
-                          .asyncMap((houseDoc) async {
-                            final houseData = houseDoc.data() as Map<String, dynamic>?;
-                            final members = List<String>.from(houseData?['members'] ?? []);
-
-                            // Fetch user details for each member
-                            final memberDocs = await Future.wait(
-                              members.map((memberId) =>
-                                FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(memberId)
-                                  .get()
-                              )
-                            );
-
-                            return memberDocs;
-                          })
-                      : null,
-                  builder: (context, memberSnapshot) {
-                    String houseName = 'Group Chat';
-                    String memberNames = 'and Beemo';
-
-                    if (houseId != null) {
-                      return StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('houses')
-                            .doc(houseId)
-                            .snapshots(),
-                        builder: (context, houseSnapshot) {
-                          if (houseSnapshot.hasData && houseSnapshot.data != null) {
-                            final houseData = houseSnapshot.data!.data() as Map<String, dynamic>?;
-                            houseName = houseData?['houseName'] ?? 'Group Chat';
-                          }
-
-                          if (memberSnapshot.hasData && memberSnapshot.data != null) {
-                            final memberDocs = memberSnapshot.data!;
-                            final names = memberDocs.map((doc) {
-                              final data = doc.data() as Map<String, dynamic>?;
-                              return data?['profile']?['name'] ?? 'User';
-                            }).toList();
-
-                            if (names.isNotEmpty) {
-                              memberNames = '${names.join(', ')} and Beemo';
-                            }
-                          }
-
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFEC5D),
-                              borderRadius: BorderRadius.circular(13),
-                            ),
-                            child: Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () => Navigator.pop(context),
-                                  child: const Icon(
-                                    Icons.arrow_back,
-                                    color: Colors.black,
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Container(
-                                  width: 39,
-                                  height: 39,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[700],
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.public,
-                                    color: Colors.white70,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        houseName,
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w900,
-                                          fontStyle: FontStyle.italic,
-                                          color: Colors.black,
-                                        ),
-                                      ),
-                                      Text(
-                                        memberNames,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w400,
-                                          color: Colors.black.withOpacity(0.8),
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                if (headerStream != null)
+                  StreamBuilder<_ChatHeaderData>(
+                    stream: headerStream,
+                    builder: (context, snapshot) {
+                      final headerInfo = snapshot.data;
+                      final houseData = headerInfo?.houseData;
+                      final memberDocs =
+                          headerInfo?.memberDocs ?? const <DocumentSnapshot<Map<String, dynamic>>>[];
+                      final houseName = _extractHouseName(
+                        houseData,
+                        houseProvider,
+                        fallback: 'Group Chat',
                       );
-                    }
+                      final memberNames = _extractMemberNamesFromDocs(
+                        memberDocs,
+                        houseProvider,
+                      );
+                      final subtitle = memberNames.isNotEmpty
+                          ? _formatMemberNameList(memberNames)
+                          : (snapshot.connectionState == ConnectionState.waiting
+                              ? 'Loading members...'
+                              : 'Beemo');
 
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFEC5D),
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      child: Row(
+                      return Column(
                         children: [
-                          GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: const Icon(
-                              Icons.arrow_back,
-                              color: Colors.black,
-                              size: 24,
-                            ),
+                          _buildChatHeaderBar(
+                            title: houseName,
+                            subtitle: subtitle,
+                            menuEnabled: !_isAutoSettingsLoading,
                           ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Group Chat',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w900,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.black,
-                            ),
-                          ),
+                          _buildMemberAvatarRow(memberDocs),
                         ],
-                      ),
-                    );
-                  },
-                ),
-
-                // Avatar row with real member data
-                StreamBuilder<List<DocumentSnapshot>>(
-                  stream: houseId != null
-                      ? FirebaseFirestore.instance
-                          .collection('houses')
-                          .doc(houseId)
-                          .snapshots()
-                          .asyncMap((houseDoc) async {
-                            final houseData = houseDoc.data() as Map<String, dynamic>?;
-                            final members = List<String>.from(houseData?['members'] ?? []);
-
-                            final memberDocs = await Future.wait(
-                              members.map((memberId) =>
-                                FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(memberId)
-                                  .get()
-                              )
-                            );
-
-                            return memberDocs;
-                          })
-                      : null,
-                  builder: (context, snapshot) {
-                    List<Widget> avatarWidgets = [];
-
-                    if (snapshot.hasData && snapshot.data != null) {
-                      final memberDocs = snapshot.data!;
-
-                      for (int i = 0; i < memberDocs.length && i < 5; i++) {
-                        final memberData = memberDocs[i].data() as Map<String, dynamic>?;
-                        final avatarEmoji = memberData?['profile']?['avatarEmoji'] ?? '👤';
-                        final avatarColor = memberData?['profile']?['avatarColor'];
-
-                        Color color = const Color(0xFFFF4D6D);
-                        if (avatarColor != null) {
-                          color = Color(avatarColor);
-                        }
-
-                        avatarWidgets.add(
-                          Positioned(
-                            left: i * 14.0,
-                            child: Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.black, width: 2),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  avatarEmoji,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      // Add Beemo at the end
-                      avatarWidgets.add(
-                        Positioned(
-                          left: avatarWidgets.length * 14.0,
-                          child: _buildBeemoAvatar(),
-                        ),
                       );
-                    } else {
-                      // Default fallback
-                      avatarWidgets = [
-                        Positioned(left: 0, child: _buildBeemoAvatar()),
-                      ];
-                    }
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      child: SizedBox(
-                        height: 24,
-                        child: Stack(
-                          children: avatarWidgets,
+                    },
+                  )
+                else
+                  Column(
+                    children: [
+                      _buildChatHeaderBar(
+                        title: 'Group Chat',
+                        subtitle: 'Beemo',
+                        menuEnabled: false,
+                        subtleMenu: true,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        child: SizedBox(
+                          height: 24,
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                left: 0,
+                                child: _buildBeemoAvatar(),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ],
+                  ),
 
                 // Chat messages
                 Expanded(
@@ -506,10 +1379,14 @@ class _ChatScreenState extends State<ChatScreen> {
                               final isCurrentUser = message.senderId == currentUserId;
                               final isBeemo = message.isBeemo;
 
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _buildMessageWidget(message, isCurrentUser, isBeemo),
-                              );
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildMessageWidget(
+                            message,
+                            isCurrentUser,
+                            isBeemo,
+                          ),
+                        );
                             },
                           );
                         },
@@ -593,7 +1470,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (isBeemo && message.messageType == 'poll') {
       return _buildFirebasePoll(message);
     } else if (isBeemo) {
-      return _buildBeemoMessage(message.message);
+      return _buildBeemoMessage(message);
     } else if (isCurrentUser) {
       return _buildRightAlignedMessage(message.message);
     } else {
@@ -654,7 +1531,16 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildBeemoMessage(String text, {String? boldText}) {
+  Widget _buildBeemoMessage(ChatMessage message) {
+    // Show countdown ONLY below the specific message that asks about the task
+    final sessionId = message.metadata?['assignmentSessionId']?.toString();
+    final countdownLabel =
+        sessionId != null ? _assignmentCountdowns[sessionId] : null;
+
+    // Check if task has been assigned
+    final taskAssigned = message.metadata?['taskAssigned'] == true;
+    final assignedToName = message.metadata?['assignedToName']?.toString();
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -694,25 +1580,84 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                boldText != null
-                    ? RichText(
-                        text: TextSpan(
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.black,
-                            height: 1.4,
-                          ),
-                          children: _buildTextWithBold(text, boldText),
-                        ),
-                      )
-                    : Text(
-                        text,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black,
-                          height: 1.4,
-                        ),
+                MarkdownBody(
+                  data: message.message,
+                  shrinkWrap: true,
+                  softLineBreak: true,
+                  styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                    p: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black,
+                      height: 1.35,
+                    ),
+                    strong: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black,
+                    ),
+                    listBullet: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+                if (taskAssigned && assignedToName != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 2, right: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF63BDA4),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.black, width: 2),
                       ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check,
+                              color: Color(0xFF63BDA4),
+                              size: 14,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Task Assigned to $assignedToName',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else if (countdownLabel != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    countdownLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -720,18 +1665,6 @@ class _ChatScreenState extends State<ChatScreen> {
         const SizedBox(width: 40),
       ],
     );
-  }
-
-  List<TextSpan> _buildTextWithBold(String fullText, String boldPart) {
-    final parts = fullText.split(boldPart);
-    return [
-      TextSpan(text: parts[0]),
-      TextSpan(
-        text: boldPart,
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      if (parts.length > 1) TextSpan(text: parts[1]),
-    ];
   }
 
   Widget _buildUserMessage(String avatar, String name, String text, Color avatarColor, {Color textColor = Colors.white}) {
@@ -1017,4 +1950,183 @@ class _ChatScreenState extends State<ChatScreen> {
       ],
     );
   }
+
+  void _subscribeToTaskAssignmentCountdown(String houseId) {
+    _autoAssignCountdownSubscription?.cancel();
+    _autoAssignCountdownSubscription = FirebaseFirestore.instance
+        .collection('houses')
+        .doc(houseId)
+        .collection('taskAssignmentSessions')
+        .where('status', isEqualTo: 'awaiting_volunteers')
+        .orderBy('autoAssignAt')
+        .snapshots()
+        .listen((snapshot) {
+      final newDeadlines = <String, DateTime>{};
+      final now = DateTime.now();
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final sourceType = data['sourceType']?.toString() ?? '';
+
+        // Only track chat and agenda items (not other sourceTypes)
+        if (sourceType != 'chat' && sourceType != 'agenda') {
+          continue;
+        }
+
+        final autoAssignAt = data['autoAssignAt'];
+        DateTime? deadline;
+        if (autoAssignAt is Timestamp) {
+          deadline = autoAssignAt.toDate();
+        } else if (autoAssignAt is DateTime) {
+          deadline = autoAssignAt;
+        }
+        if (deadline != null) {
+          newDeadlines[doc.id] = deadline;
+
+          // Trigger auto-assignment if deadline has passed
+          if (deadline.isBefore(now) || deadline.isAtSameMomentAs(now)) {
+            _triggerAutoAssignment(houseId);
+          }
+        }
+      }
+
+      _assignmentDeadlines
+        ..clear()
+        ..addAll(newDeadlines);
+      _refreshCountdownLabels();
+    });
+  }
+
+  Future<void> _triggerAutoAssignment(String houseId) async {
+    print('DEBUG [ChatScreen]: Triggering auto-assignment for house $houseId');
+    try {
+      await _firestoreService.maybeAutoAssignChatSessions(houseId);
+      print('DEBUG [ChatScreen]: Auto-assignment completed successfully');
+    } catch (e, stackTrace) {
+      print('DEBUG [ChatScreen]: Error triggering auto-assignment: $e');
+      print('DEBUG [ChatScreen]: Stack trace: $stackTrace');
+    }
+  }
+
+  DateTime? _computeNextAutoCheckInTarget(DateTime now) {
+    if (!_autoCheckInEnabled) {
+      return null;
+    }
+
+    final triggeredThisWeek =
+        _lastAutoPromptAt != null && _isSameWeek(now, _lastAutoPromptAt!);
+
+    final inWindow = now.weekday >= DateTime.wednesday &&
+        now.weekday <= DateTime.thursday &&
+        !triggeredThisWeek;
+    if (inWindow) {
+      return now;
+    }
+
+    DateTime reference = now;
+    if (triggeredThisWeek) {
+      reference = reference.add(const Duration(days: 7));
+    }
+
+    final normalized = DateTime(reference.year, reference.month, reference.day);
+    const int daysPerWeek = 7;
+    int daysToAdd = (DateTime.wednesday - normalized.weekday) % daysPerWeek;
+    if (daysToAdd <= 0) {
+      daysToAdd += daysPerWeek;
+    }
+    final candidate = normalized.add(Duration(days: daysToAdd));
+    DateTime target = DateTime(candidate.year, candidate.month, candidate.day, 10);
+    if (target.isBefore(now)) {
+      target = target.add(const Duration(days: 7));
+    }
+    return target;
+  }
+
+  String _formatDuration(Duration duration) {
+    final totalSeconds = duration.inSeconds;
+    if (totalSeconds <= 0) {
+      return '0m';
+    }
+
+    final totalMinutes = duration.inMinutes;
+    final days = totalMinutes ~/ (24 * 60);
+    final hours = (totalMinutes % (24 * 60)) ~/ 60;
+    final minutes = totalMinutes % 60;
+
+    final parts = <String>[];
+    if (days > 0) {
+      parts.add('${days}d');
+    }
+    if (hours > 0 && parts.length < 2) {
+      parts.add('${hours}h');
+    }
+    if (minutes > 0 && parts.length < 2) {
+      parts.add('${minutes}m');
+    }
+    if (parts.isEmpty) {
+      parts.add('less than 1m');
+    }
+    return parts.join(' ');
+  }
+
+  void _refreshCountdownLabels() {
+    if (!mounted) return;
+
+    final now = DateTime.now();
+    final newAssignmentLabels = <String, String>{};
+    _assignmentDeadlines.forEach((sessionId, deadline) {
+      final diff = deadline.difference(now);
+      final label = diff <= const Duration(seconds: 30)
+          ? 'Auto-assigning now'
+          : 'Auto-assigns in ${_formatDuration(diff)}';
+      newAssignmentLabels[sessionId] = label;
+    });
+
+    String? checkLabel;
+    if (_autoCheckInEnabled) {
+      final target = _computeNextAutoCheckInTarget(now);
+      if (target != null) {
+        final diff = target.difference(now);
+        checkLabel = diff <= const Duration(seconds: 30)
+            ? 'Auto check-in running now'
+            : 'Auto check-in in ${_formatDuration(diff)}';
+      }
+    }
+
+    final shouldRunTimer = newAssignmentLabels.isNotEmpty ||
+        (checkLabel != null && checkLabel != 'Auto check-in running now');
+    if (shouldRunTimer) {
+      _countdownTimer ??= Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _refreshCountdownLabels(),
+      );
+    } else {
+      _countdownTimer?.cancel();
+      _countdownTimer = null;
+    }
+
+    final assignmentsChanged =
+        newAssignmentLabels.length != _assignmentCountdowns.length ||
+            newAssignmentLabels.entries.any(
+              (entry) => _assignmentCountdowns[entry.key] != entry.value,
+            );
+
+    if (assignmentsChanged || checkLabel != _autoCheckInCountdownLabel) {
+      setState(() {
+        _assignmentCountdowns
+          ..clear()
+          ..addAll(newAssignmentLabels);
+        _autoCheckInCountdownLabel = checkLabel;
+      });
+    }
+  }
 }
+
+
+
+
+
+
+
+
+

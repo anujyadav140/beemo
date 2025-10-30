@@ -12,6 +12,9 @@ class Task {
   final DateTime createdAt;
   final String createdBy;
   final String? confirmedBy;
+  final String? confirmedByName;
+  final String? completionRequestedBy;
+  final DateTime? completionRequestedAt;
   final DateTime? completedAt;
 
   Task({
@@ -26,6 +29,9 @@ class Task {
     required this.createdAt,
     required this.createdBy,
     this.confirmedBy,
+    this.confirmedByName,
+    this.completionRequestedBy,
+    this.completionRequestedAt,
     this.completedAt,
   });
 
@@ -44,6 +50,11 @@ class Task {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdBy: data['createdBy'] ?? '',
       confirmedBy: data['confirmedBy'],
+      confirmedByName: data['confirmedByName'],
+      completionRequestedBy: data['completionRequestedBy'],
+      completionRequestedAt: data['completionRequestedAt'] != null
+          ? (data['completionRequestedAt'] as Timestamp).toDate()
+          : null,
       completedAt: data['completedAt'] != null ? (data['completedAt'] as Timestamp).toDate() : null,
     );
   }
@@ -60,6 +71,10 @@ class Task {
       'createdAt': Timestamp.fromDate(createdAt),
       'createdBy': createdBy,
       'confirmedBy': confirmedBy,
+      'confirmedByName': confirmedByName,
+      'completionRequestedBy': completionRequestedBy,
+      'completionRequestedAt':
+          completionRequestedAt != null ? Timestamp.fromDate(completionRequestedAt!) : null,
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
     };
   }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/auth_provider.dart';
 import '../providers/house_provider.dart';
+import '../models/house_model.dart';
 import 'manage_members_screen.dart';
 import 'edit_profile_screen.dart';
 import 'edit_house_profile_screen.dart';
@@ -12,6 +13,20 @@ class AccountSettingsScreen extends StatefulWidget {
 
   @override
   State<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
+}
+
+class _MemberTileData {
+  const _MemberTileData({
+    required this.id,
+    required this.displayName,
+    required this.role,
+    required this.isCurrentUser,
+  });
+
+  final String id;
+  final String displayName;
+  final String role;
+  final bool isCurrentUser;
 }
 
 class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
@@ -44,12 +59,19 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
               builder: (context, houseSnapshot) {
                 String houseName = 'No House';
                 String houseCode = '';
+                Map<String, dynamic>? houseData;
 
                 if (houseSnapshot.hasData && houseSnapshot.data != null) {
-                  final houseData = houseSnapshot.data!.data() as Map<String, dynamic>?;
+                  houseData = houseSnapshot.data!.data() as Map<String, dynamic>?;
                   houseName = houseData?['houseName'] ?? 'No House';
                   houseCode = houseData?['houseCode'] ?? '';
                 }
+
+                final memberTiles = _collectHouseMembers(
+                  houseData,
+                  houseProvider,
+                  userId,
+                );
 
                 return SingleChildScrollView(
                   child: Padding(
@@ -273,6 +295,270 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
         ),
       ),
     );
+  }
+
+  List<_MemberTileData> _collectHouseMembers(
+    Map<String, dynamic>? houseData,
+    HouseProvider houseProvider,
+    String? currentUserId,
+  ) {
+    final Map<String, _MemberTileData> collected = {};
+    final membersField = houseData?['members'];
+    final providerMembers = houseProvider.currentHouse?.members;
+
+    void addMember(
+      String id, {
+      Map<String, dynamic>? rawMember,
+      HouseMember? providerMember,
+    }) {
+      final trimmedId = id.trim();
+      if (trimmedId.isEmpty) {
+        return;
+      }
+
+      final existing = collected[trimmedId];
+
+      String? displayName;
+      final nameCandidates = <String?>[
+        rawMember?['name']?.toString(),
+        rawMember?['displayName']?.toString(),
+        providerMember?.name,
+        existing?.displayName,
+      ];
+      for (final candidate in nameCandidates) {
+        if (candidate != null && candidate.trim().isNotEmpty) {
+          displayName = candidate.trim();
+          break;
+        }
+      }
+      displayName ??= 'Member';
+
+      String? role;
+      final roleCandidates = <String?>[
+        rawMember?['role']?.toString(),
+        providerMember?.role,
+        existing?.role,
+      ];
+      for (final candidate in roleCandidates) {
+        if (candidate != null && candidate.trim().isNotEmpty) {
+          role = candidate.trim();
+          break;
+        }
+      }
+      role ??= 'member';
+
+      final isCurrent = currentUserId != null && trimmedId == currentUserId;
+
+      collected[trimmedId] = _MemberTileData(
+        id: trimmedId,
+        displayName: displayName,
+        role: role,
+        isCurrentUser: isCurrent,
+      );
+    }
+
+    if (membersField is Map) {
+      membersField.forEach((key, value) {
+        final memberId = key.toString();
+        if (value is Map) {
+          final map = <String, dynamic>{};
+          value.forEach((entryKey, entryValue) {
+            map[entryKey.toString()] = entryValue;
+          });
+          addMember(
+            memberId,
+            rawMember: map,
+            providerMember: providerMembers?[memberId],
+          );
+        } else {
+          addMember(
+            memberId,
+            providerMember: providerMembers?[memberId],
+          );
+        }
+      });
+    } else if (membersField is List) {
+      for (var index = 0; index < membersField.length; index++) {
+        final entry = membersField[index];
+        if (entry is Map) {
+          final rawMember = <String, dynamic>{};
+          entry.forEach((entryKey, entryValue) {
+            rawMember[entryKey.toString()] = entryValue;
+          });
+
+          String memberId = '';
+          const possibleKeys = [
+            'id',
+            'uid',
+            'userId',
+            'memberId',
+            'authId',
+            'ref',
+          ];
+          for (final key in possibleKeys) {
+            final candidate = rawMember[key];
+            if (candidate != null && candidate.toString().trim().isNotEmpty) {
+              memberId = candidate.toString().trim();
+              break;
+            }
+          }
+
+          if (memberId.isEmpty) {
+            final nameFallback = rawMember['name']?.toString() ?? rawMember['displayName']?.toString();
+            if (nameFallback != null && nameFallback.trim().isNotEmpty) {
+              memberId = nameFallback.trim();
+            } else {
+              memberId = 'member_${index + 1}';
+            }
+          }
+
+          addMember(memberId, rawMember: rawMember, providerMember: providerMembers?[memberId]);
+        }
+      }
+    }
+
+    if (providerMembers != null) {
+      providerMembers.forEach((id, member) {
+        addMember(id, providerMember: member);
+      });
+    }
+
+    if (currentUserId != null && !collected.containsKey(currentUserId)) {
+      addMember(currentUserId, providerMember: providerMembers?[currentUserId]);
+    }
+
+    final List<_MemberTileData> members = collected.values.toList()
+      ..sort((a, b) {
+        if (a.isCurrentUser != b.isCurrentUser) {
+          return a.isCurrentUser ? -1 : 1;
+        }
+        final nameCompare = a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+        if (nameCompare != 0) {
+          return nameCompare;
+        }
+        return a.id.compareTo(b.id);
+      });
+
+    return members;
+  }
+
+  Widget _buildMemberListSection(List<_MemberTileData> members) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black, width: 2.5),
+      ),
+      child: Column(
+        children: [
+          for (var index = 0; index < members.length; index++)
+            _buildMemberRow(
+              members[index],
+              isLast: index == members.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMemberRow(_MemberTileData member, {required bool isLast}) {
+    final roleLabel = _formatRoleLabel(member.role);
+
+    return Container(
+      decoration: BoxDecoration(
+        border: isLast ? null : const Border(
+          bottom: BorderSide(color: Colors.black12, width: 1),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF3C9),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.black, width: 2),
+            ),
+            child: const Icon(
+              Icons.person,
+              size: 18,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        member.displayName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (member.isCurrentUser) ...[
+                      const SizedBox(width: 8),
+                      _buildYouChip(),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  roleLabel,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildYouChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Text(
+        'You',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  String _formatRoleLabel(String role) {
+    final trimmed = role.trim();
+    if (trimmed.isEmpty) {
+      return 'Member';
+    }
+
+    if (trimmed.length == 1) {
+      return trimmed.toUpperCase();
+    }
+
+    final lower = trimmed.toLowerCase();
+    return lower[0].toUpperCase() + lower.substring(1);
   }
 
   Widget _buildSettingItem({

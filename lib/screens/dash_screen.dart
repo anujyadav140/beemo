@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../providers/house_provider.dart';
+import '../services/firestore_service.dart';
+import '../models/activity_model.dart';
 import 'meeting_notes_screen.dart';
 import 'tasks_screen.dart';
 import 'agenda_screen.dart';
@@ -246,11 +249,28 @@ class _DashScreenState extends State<DashScreen> {
                   const SizedBox(height: 4),
 
                   // Agenda goal
-                  const Center(
-                    child: Text(
-                      'Agenda items goal: 3/4',
-                      style: TextStyle(fontSize: 13, color: Colors.black87),
-                    ),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: houseId != null
+                        ? FirebaseFirestore.instance
+                            .collection('agendaItems')
+                            .where('houseId', isEqualTo: houseId)
+                            .where('priority', isEqualTo: 'meeting')
+                            .snapshots()
+                        : null,
+                    builder: (context, agendaSnapshot) {
+                      final meetingAgendaCount = agendaSnapshot.hasData
+                          ? agendaSnapshot.data!.docs.length
+                          : 0;
+                      return Center(
+                        child: Text(
+                          'Agenda items goal: $meetingAgendaCount/4',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      );
+                    },
                   ),
 
                   // Cards 2x2 Grid - Completely redesigned from scratch
@@ -312,7 +332,7 @@ class _DashScreenState extends State<DashScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const ChatScreen(),
+                          builder: (context) => ChatScreen(),
                         ),
                       );
                     },
@@ -608,7 +628,7 @@ class _DashScreenState extends State<DashScreen> {
                                       }
 
                                       return Column(
-                                        children: messages.map((messageDoc) {
+                                        children: messages.reversed.map((messageDoc) {
                                           final messageData =
                                               messageDoc.data()
                                                   as Map<String, dynamic>?;
@@ -908,12 +928,10 @@ class _DashScreenState extends State<DashScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: houseId != null
           ? FirebaseFirestore.instance
-                .collection('houses')
-                .doc(houseId)
                 .collection('tasks')
-                .where('status', isEqualTo: 'pending')
+                .where('houseId', isEqualTo: houseId)
                 .orderBy('createdAt', descending: true)
-                .limit(2)
+                .limit(3)
                 .snapshots()
           : null,
       builder: (context, snapshot) {
@@ -981,9 +999,17 @@ class _DashScreenState extends State<DashScreen> {
                       : SingleChildScrollView(
                           physics: const NeverScrollableScrollPhysics(),
                           child: Column(
-                            children: tasks.take(2).map((taskDoc) {
+                            children: tasks.take(3).map((taskDoc) {
                               final task = taskDoc.data() as Map<String, dynamic>;
                               final title = task['title'] ?? 'Untitled';
+                              final status =
+                                  (task['status'] ?? '').toString().toLowerCase();
+                              final isCompleted =
+                                  status == 'completed' || task['isCompleted'] == true;
+                              final isAwaitingConfirmation =
+                                  status == 'pending_confirmation';
+                              final confirmedByName =
+                                  (task['confirmedByName'] ?? '').toString().trim();
 
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
@@ -991,27 +1017,69 @@ class _DashScreenState extends State<DashScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Container(
-                                      width: 18,
-                                      height: 18,
+                                      width: 20,
+                                      height: 20,
                                       margin: const EdgeInsets.only(top: 1),
                                       decoration: BoxDecoration(
-                                        color: Colors.transparent,
-                                        borderRadius: BorderRadius.circular(4),
+                                        color: isCompleted ? Colors.white : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(6),
                                         border: Border.all(color: Colors.white, width: 2.5),
                                       ),
+                                      child: isCompleted
+                                          ? const Icon(
+                                              Icons.check,
+                                              size: 12,
+                                              color: Color(0xFFFF4D8D),
+                                            )
+                                          : isAwaitingConfirmation
+                                              ? const Icon(
+                                                  Icons.hourglass_bottom,
+                                                  size: 12,
+                                                  color: Colors.white,
+                                                )
+                                              : null,
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: Text(
-                                        title,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          height: 1.3,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            title,
+                                            style: TextStyle(
+                                              color: isCompleted ? Colors.white70 : Colors.white,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              height: 1.3,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (isAwaitingConfirmation)
+                                            const Padding(
+                                              padding: EdgeInsets.only(top: 2),
+                                              child: Text(
+                                                'Awaiting peer confirmation',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          if (isCompleted && confirmedByName.isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 2),
+                                              child: Text(
+                                                'Confirmed by $confirmedByName',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -1036,15 +1104,54 @@ class _DashScreenState extends State<DashScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: houseId != null
           ? FirebaseFirestore.instance
-                .collection('houses')
-                .doc(houseId)
-                .collection('activity')
-                .orderBy('timestamp', descending: true)
+                .collection('activities')
+                .where('houseId', isEqualTo: houseId)
+                .orderBy('createdAt', descending: true)
                 .limit(1)
                 .snapshots()
           : null,
       builder: (context, snapshot) {
         final activities = snapshot.hasData ? snapshot.data!.docs : [];
+        final isLoading =
+            snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData;
+
+        String primaryText = 'No activity yet';
+        String? secondaryText;
+        String timeText = '';
+
+        if (activities.isNotEmpty) {
+          final activity = activities.first.data() as Map<String, dynamic>;
+          final rawDescription = (activity['description'] ?? '').toString().trim();
+          final rawTitle = (activity['title'] ?? '').toString().trim();
+          final createdAt = activity['createdAt'];
+
+          primaryText = rawDescription.isNotEmpty
+              ? rawDescription
+              : (rawTitle.isNotEmpty ? rawTitle : 'Latest update');
+
+          if (rawTitle.isNotEmpty && rawTitle != primaryText) {
+            secondaryText = rawTitle;
+          }
+
+          if (createdAt is Timestamp) {
+            final activityTime = createdAt.toDate();
+            final now = DateTime.now();
+            if (DateUtils.isSameDay(activityTime, now)) {
+              timeText =
+                  'Today \u2022 ${DateFormat('h:mm a').format(activityTime)}';
+            } else if (DateUtils.isSameDay(
+              activityTime,
+              now.subtract(const Duration(days: 1)),
+            )) {
+              timeText =
+                  'Yesterday \u2022 ${DateFormat('h:mm a').format(activityTime)}';
+            } else {
+              final dateLabel = DateFormat('MMM d').format(activityTime);
+              final timeLabel = DateFormat('h:mm a').format(activityTime);
+              timeText = '$dateLabel \u2022 $timeLabel';
+            }
+          }
+        }
 
         return GestureDetector(
           onTap: () {
@@ -1101,50 +1208,80 @@ class _DashScreenState extends State<DashScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Flexible(
-                  child: activities.isEmpty
-                      ? const Text(
-                          'No activity yet',
-                          style: TextStyle(color: Colors.white, fontSize: 13),
-                        )
-                      : SingleChildScrollView(
-                          physics: const NeverScrollableScrollPhysics(),
-                          child: Column(
-                            children: activities.take(1).map((activityDoc) {
-                              final activity = activityDoc.data() as Map<String, dynamic>;
-                              final description = activity['description'] ?? 'Activity';
-
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    '• ',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      description,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        height: 1.3,
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                          ),
+                if (isLoading)
+                  const SizedBox(
+                    height: 36,
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
-                ),
+                      ),
+                    ),
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '\u2022',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              primaryText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                height: 1.3,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (secondaryText != null && secondaryText!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  secondaryText!,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    height: 1.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            if (timeText.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  timeText,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -1160,14 +1297,28 @@ class _DashScreenState extends State<DashScreen> {
     return StreamBuilder<DocumentSnapshot>(
       stream: houseId != null
           ? FirebaseFirestore.instance
-                .collection('houses')
+                .collection('nextMeetings')
                 .doc(houseId)
                 .snapshots()
           : null,
       builder: (context, snapshot) {
-        // Dummy data for now
-        String meetingDate = 'Oct 8';
-        String meetingTime = '1:00 pm';
+        DateTime? scheduledTime;
+
+        if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          final timestamp = data?['scheduledTime'] as Timestamp?;
+          if (timestamp != null) {
+            scheduledTime = timestamp.toDate();
+          }
+        }
+
+        final hasMeeting = scheduledTime != null;
+        final meetingDate = hasMeeting
+            ? DateFormat('MMM d').format(scheduledTime!)
+            : 'No meeting decided';
+        final meetingTime = hasMeeting
+            ? DateFormat('h:mm a').format(scheduledTime!)
+            : 'Tap to plan with Beemo';
 
         return GestureDetector(
           onTap: () {
@@ -1191,7 +1342,6 @@ class _DashScreenState extends State<DashScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.max,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1224,27 +1374,62 @@ class _DashScreenState extends State<DashScreen> {
                     ),
                   ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      meetingDate,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black,
-                        height: 1.0,
-                      ),
-                    ),
-                    Text(
-                      meetingTime,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 6),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return FittedBox(
+                        alignment: Alignment.bottomLeft,
+                        fit: BoxFit.scaleDown,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                meetingDate,
+                                style: hasMeeting
+                                    ? const TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.black,
+                                        height: 1.0,
+                                      )
+                                    : TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.black.withOpacity(0.65),
+                                        height: 1.15,
+                                      ),
+                                maxLines: hasMeeting ? 1 : 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                meetingTime,
+                                style: hasMeeting
+                                    ? const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black,
+                                        height: 1.1,
+                                      )
+                                    : TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black.withOpacity(0.6),
+                                        height: 1.2,
+                                      ),
+                                maxLines: hasMeeting ? 1 : 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -1900,7 +2085,7 @@ class _AnimatedTasksCardState extends State<_AnimatedTasksCard> {
                       .collection('tasks')
                       .where('houseId', isEqualTo: houseId)
                       .where('assignedTo', isEqualTo: userId)
-                      .where('status', isEqualTo: 'pending')
+                      .where('status', whereIn: ['pending', 'pending_confirmation'])
                       .orderBy('createdAt', descending: true)
                       .limit(1)
                       .snapshots()
@@ -1911,7 +2096,14 @@ class _AnimatedTasksCardState extends State<_AnimatedTasksCard> {
               if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
                 final taskData =
                     snapshot.data!.docs.first.data() as Map<String, dynamic>?;
-                taskText = taskData?['title'] ?? 'Task';
+                final status =
+                    (taskData?['status'] ?? '').toString().toLowerCase();
+                final title = (taskData?['title'] ?? 'Task').toString();
+                if (status == 'pending_confirmation') {
+                  taskText = 'Awaiting confirmation: $title';
+                } else {
+                  taskText = title;
+                }
               }
 
               return Column(
@@ -1954,6 +2146,7 @@ class _AnimatedRecentActivityCard extends StatefulWidget {
 
 class _AnimatedRecentActivityCardState
     extends State<_AnimatedRecentActivityCard> {
+  final FirestoreService _firestoreService = FirestoreService();
   bool _isPressed = false;
 
   @override
@@ -1999,79 +2192,313 @@ class _AnimatedRecentActivityCardState
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.black, width: 3),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Recent Activity',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFF1744),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.person,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Ria finished with her task',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white,
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.bottomRight,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.black, width: 2),
-                      ),
-                      child: const Text(
-                        'Confirm',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          child: _buildActivityContent(context),
         ),
       ),
     );
   }
+
+  Widget _buildActivityContent(BuildContext context) {
+    final houseProvider = Provider.of<HouseProvider>(context);
+    final houseId = houseProvider.currentHouseId;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Recent Activity',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: houseId == null
+              ? const _ActivityEmptyState(
+                  message: 'Join a house to start tracking activity.',
+                )
+              : StreamBuilder<List<Activity>>(
+                  stream: _firestoreService.getActivitiesStream(houseId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      );
+                    }
+
+                    final activities = (snapshot.data ?? [])
+                        .where(_isRelevantActivity)
+                        .toList();
+
+                    if (activities.isEmpty) {
+                      return const _ActivityEmptyState(
+                        message: 'No activity yet. I\'ll keep you posted!',
+                      );
+                    }
+
+                    final sections = _groupActivitiesByDay(activities);
+                    final widgets = <Widget>[];
+                    const int maxRows = 4;
+                    int rowCount = 0;
+
+                    for (final entry in sections) {
+                      if (entry.activities.isEmpty) continue;
+                      widgets.add(Text(
+                        entry.label,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white70,
+                        ),
+                      ));
+                      widgets.add(const SizedBox(height: 6));
+
+                      for (final activity in entry.activities) {
+                        if (rowCount >= maxRows) break;
+                        widgets.add(_ActivityRow(activity: activity));
+                        widgets.add(const SizedBox(height: 10));
+                        rowCount++;
+                      }
+
+                      if (rowCount >= maxRows) break;
+                      widgets.add(const SizedBox(height: 4));
+                    }
+
+                    if (widgets.isNotEmpty) {
+                      widgets.removeLast();
+                    }
+
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 2),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: widgets,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  bool _isRelevantActivity(Activity activity) {
+    switch (activity.type) {
+      case 'task_completed':
+      case 'task_created':
+      case 'task_assigned':
+      case 'agenda_created':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  List<_ActivitySection> _groupActivitiesByDay(List<Activity> activities) {
+    final now = DateTime.now();
+    final List<_ActivitySection> sections = [];
+
+    final List<Activity> today = [];
+    final List<Activity> yesterday = [];
+    final List<Activity> earlier = [];
+
+    for (final activity in activities) {
+      final created = activity.createdAt.toLocal();
+      final createdDay = DateTime(created.year, created.month, created.day);
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final difference = todayStart.difference(createdDay).inDays;
+
+      if (difference == 0) {
+        today.add(activity);
+      } else if (difference == 1) {
+        yesterday.add(activity);
+      } else {
+        earlier.add(activity);
+      }
+    }
+
+    if (today.isNotEmpty) {
+      sections.add(_ActivitySection('Today', today));
+    }
+    if (yesterday.isNotEmpty) {
+      sections.add(_ActivitySection('Yesterday', yesterday));
+    }
+    if (earlier.isNotEmpty) {
+      sections.add(_ActivitySection('Earlier', earlier));
+    }
+
+    return sections;
+  }
+}
+
+class _ActivitySection {
+  _ActivitySection(this.label, this.activities);
+
+  final String label;
+  final List<Activity> activities;
+}
+
+class _ActivityEmptyState extends StatelessWidget {
+  const _ActivityEmptyState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 12,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityRow extends StatelessWidget {
+  const _ActivityRow({required this.activity});
+
+  final Activity activity;
+
+  @override
+  Widget build(BuildContext context) {
+    final _ActivityPresentation presentation = _activityPresentation(activity);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: presentation.color,
+            shape: BoxShape.circle,
+          ),
+          child: presentation.emoji != null
+              ? Center(
+                  child: Text(
+                    presentation.emoji!,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                )
+              : Icon(
+                  presentation.icon,
+                  size: 14,
+                  color: Colors.white,
+                ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            presentation.message,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.white,
+              height: 1.3,
+            ),
+          ),
+        ),
+        if (presentation.showConfirmChip)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.black, width: 2),
+            ),
+            child: const Text(
+              'Confirm',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  _ActivityPresentation _activityPresentation(Activity activity) {
+    switch (activity.type) {
+      case 'task_completed':
+        // Task completion - show who did it and what needs confirmation
+        final description = activity.description.isNotEmpty
+            ? activity.description
+            : 'Task completed - needs confirmation';
+        return _ActivityPresentation(
+          icon: Icons.check_circle,
+          color: const Color(0xFFFF1744),
+          message: description,
+          showConfirmChip: true,
+        );
+      case 'task_created':
+      case 'task_assigned':
+        final taskTitle = activity.metadata['taskTitle']?.toString() ?? activity.title;
+        final assignedTo = activity.metadata['assignedToName']?.toString() ?? '';
+        final assignedPhrase = assignedTo.isNotEmpty ? ' → $assignedTo' : '';
+        // Check if it's an AI assignment
+        final isAIAssignment = activity.title.contains('(AI)') ||
+                                activity.description.contains('Beemo') ||
+                                activity.createdBy == 'ai_agent';
+        return _ActivityPresentation(
+          icon: Icons.assignment,
+          color: isAIAssignment ? const Color(0xFFFFC400) : const Color(0xFF6200EA),
+          message: 'New task$assignedPhrase: "$taskTitle".',
+          emoji: isAIAssignment ? '🤖' : null,
+        );
+      case 'agenda_created':
+        final agendaTitle =
+            activity.metadata['agendaTitle']?.toString() ?? activity.title;
+        final priority = activity.metadata['priority']?.toString();
+        final priorityLabel =
+            priority != null ? priority.toUpperCase() : 'AGENDA';
+        return _ActivityPresentation(
+          icon: Icons.event_note,
+          color: const Color(0xFFFFC400),
+          message: '$priorityLabel agenda added: "$agendaTitle".',
+        );
+      default:
+        return _ActivityPresentation(
+          icon: Icons.notifications,
+          color: Colors.black,
+          message: activity.description.isNotEmpty
+              ? activity.description
+              : activity.title,
+        );
+    }
+  }
+}
+
+class _ActivityPresentation {
+  _ActivityPresentation({
+    required this.icon,
+    required this.color,
+    required this.message,
+    this.showConfirmChip = false,
+    this.emoji, // Optional emoji to show instead of icon
+  });
+
+  final IconData icon;
+  final Color color;
+  final String message;
+  final bool showConfirmChip;
+  final String? emoji;
 }
 
 class _AnimatedNextMeetingCard extends StatefulWidget {

@@ -5,6 +5,39 @@ import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/task_model.dart';
+import 'dash_screen.dart';
+import 'setup_house_screen.dart';
+
+class _TaskGroup {
+  _TaskGroup({
+    required this.key,
+    String? assignedId,
+    String? assignedName,
+  })  : assignedId = _trimOrNull(assignedId),
+        assignedName = _trimOrNull(assignedName);
+
+  final String key;
+  String? assignedId;
+  String? assignedName;
+  final List<Task> tasks = [];
+
+  bool isCurrentUser(String? userId) {
+    if (assignedId == null || userId == null) {
+      return false;
+    }
+    return assignedId == userId;
+  }
+
+  bool get isUnassigned =>
+      (assignedId == null || assignedId!.isEmpty) &&
+      (assignedName == null || assignedName!.isEmpty);
+
+  static String? _trimOrNull(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+}
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -30,6 +63,161 @@ class _TasksScreenState extends State<TasksScreen> {
     }
   }
 
+  List<_TaskGroup> _groupTasksByAssignee(
+    List<Task> tasks,
+    HouseProvider houseProvider,
+    String? currentUserId,
+  ) {
+    final Map<String, _TaskGroup> groups = {};
+
+    for (final task in tasks) {
+      final assignedId = task.assignedTo.trim();
+      final assignedName = task.assignedToName.trim();
+
+      String key;
+      if (assignedId.isNotEmpty) {
+        key = 'user:$assignedId';
+      } else if (assignedName.isNotEmpty) {
+        key = 'name:${assignedName.toLowerCase()}';
+      } else {
+        key = 'unassigned';
+      }
+
+      final group = groups.putIfAbsent(
+        key,
+        () => _TaskGroup(
+          key: key,
+          assignedId: assignedId.isNotEmpty ? assignedId : null,
+          assignedName: null,
+        ),
+      );
+
+      if ((group.assignedId == null || group.assignedId!.isEmpty) && assignedId.isNotEmpty) {
+        group.assignedId = assignedId;
+      }
+
+      final resolvedName = _resolveMemberName(
+        assignedId: assignedId.isNotEmpty ? assignedId : group.assignedId,
+        fallbackName: assignedName.isNotEmpty ? assignedName : group.assignedName,
+        houseProvider: houseProvider,
+      );
+
+      if (resolvedName != null && resolvedName.isNotEmpty) {
+        group.assignedName = resolvedName;
+      }
+
+      group.tasks.add(task);
+    }
+
+    final groupedList = groups.values.toList();
+
+    groupedList.sort((a, b) {
+      final aIsUnassigned = a.isUnassigned;
+      final bIsUnassigned = b.isUnassigned;
+
+      // Unassigned tasks come first
+      if (aIsUnassigned != bIsUnassigned) {
+        return aIsUnassigned ? -1 : 1;
+      }
+
+      final aIsCurrent = a.isCurrentUser(currentUserId);
+      final bIsCurrent = b.isCurrentUser(currentUserId);
+
+      // My tasks come second (after unassigned)
+      if (aIsCurrent != bIsCurrent) {
+        return aIsCurrent ? -1 : 1;
+      }
+
+      // Other tasks sorted alphabetically
+      final aTitle = _taskGroupTitle(a, currentUserId);
+      final bTitle = _taskGroupTitle(b, currentUserId);
+      return aTitle.toLowerCase().compareTo(bTitle.toLowerCase());
+    });
+
+    return groupedList;
+  }
+
+  String _taskGroupTitle(_TaskGroup group, String? currentUserId) {
+    // Check if unassigned first
+    if (group.isUnassigned) {
+      return 'Unassigned Tasks';
+    }
+
+    if (group.isCurrentUser(currentUserId)) {
+      return 'My Tasks';
+    }
+
+    final name = group.assignedName;
+    if (_isMeaningfulName(name)) {
+      final trimmed = name!.trim();
+      final lower = trimmed.toLowerCase();
+
+      if (lower == 'unassigned') {
+        return 'Unassigned Tasks';
+      }
+      if (lower == 'house' || lower == 'household') {
+        return 'House Tasks';
+      }
+
+      return '${_formatPossessiveLabel(trimmed)} Tasks';
+    }
+
+    if (group.assignedId != null && group.assignedId!.isNotEmpty) {
+      return 'Assigned Tasks';
+    }
+
+    return 'House Tasks';
+  }
+
+  String? _resolveMemberName({
+    required String? assignedId,
+    required String? fallbackName,
+    required HouseProvider houseProvider,
+  }) {
+    if (_isMeaningfulName(fallbackName)) {
+      return fallbackName!.trim();
+    }
+
+    final id = assignedId?.trim();
+    if (id != null && id.isNotEmpty) {
+      final member = houseProvider.currentHouse?.members[id];
+      if (member != null && member.name.trim().isNotEmpty) {
+        return member.name.trim();
+      }
+
+      final suffix = id.length > 4 ? id.substring(id.length - 4) : id;
+      return 'Member $suffix';
+    }
+
+    if (fallbackName != null && fallbackName.trim().isNotEmpty) {
+      return fallbackName.trim();
+    }
+
+    return null;
+  }
+
+  bool _isMeaningfulName(String? name) {
+    if (name == null) {
+      return false;
+    }
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return false;
+    }
+    final lower = trimmed.toLowerCase();
+    return lower != 'unknown' && lower != 'null';
+  }
+
+  String _formatPossessiveLabel(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return 'House';
+    }
+    final endsWithS = trimmed.toLowerCase().endsWith('s');
+    final suffix = endsWithS ? '\'' : '\'s';
+    return '$trimmed$suffix';
+  }
+
   @override
   Widget build(BuildContext context) {
     final houseProvider = Provider.of<HouseProvider>(context);
@@ -48,9 +236,9 @@ class _TasksScreenState extends State<TasksScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            Expanded(
+            Positioned.fill(
               child: StreamBuilder<List<Task>>(
                 stream: _firestoreService.getTasksStream(houseProvider.currentHouseId!),
                 builder: (context, snapshot) {
@@ -64,17 +252,14 @@ class _TasksScreenState extends State<TasksScreen> {
 
                   final tasks = snapshot.data ?? [];
 
-                  // Group tasks by user
-                  final Map<String, List<Task>> tasksByUser = {};
-                  for (final task in tasks) {
-                    if (!tasksByUser.containsKey(task.assignedToName)) {
-                      tasksByUser[task.assignedToName] = [];
-                    }
-                    tasksByUser[task.assignedToName]!.add(task);
-                  }
+                  final taskGroups = _groupTasksByAssignee(
+                    tasks,
+                    houseProvider,
+                    currentUserId,
+                  );
 
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 160),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -226,26 +411,26 @@ class _TasksScreenState extends State<TasksScreen> {
                             ),
                           )
                         else
-                          ...tasksByUser.entries.map((entry) {
-                            final userName = entry.key;
-                            final userTasks = entry.value;
-                            final isCurrentUser = userTasks.any((task) => task.assignedTo == currentUserId);
+                          ...taskGroups.map((group) {
+                            final title = _taskGroupTitle(group, currentUserId);
 
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  isCurrentUser ? 'My Tasks' : '$userName\'s Tasks',
+                                  title,
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.w900,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
-                                ...userTasks.map((task) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _buildTaskCard(task, currentUserId),
-                                )),
+                                ...group.tasks.map(
+                                  (task) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _buildTaskCard(task, currentUserId),
+                                  ),
+                                ),
                                 const SizedBox(height: 20),
                               ],
                             );
@@ -257,15 +442,14 @@ class _TasksScreenState extends State<TasksScreen> {
               ),
             ),
 
-            // Bottom Navigation
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20.0, top: 8.0),
+            // Floating Bottom Navigation
+            Positioned(
+              bottom: 20,
+              left: 0,
+              right: 0,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 14,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                   decoration: BoxDecoration(
                     color: const Color(0xFF16213E),
                     borderRadius: BorderRadius.circular(34),
@@ -273,11 +457,34 @@ class _TasksScreenState extends State<TasksScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildNavIcon(Icons.view_in_ar_rounded, false),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SetupHouseScreen(),
+                            ),
+                          );
+                        },
+                        child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                      ),
                       const SizedBox(width: 28),
-                      _buildBeemoNavIcon(true),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DashScreen(),
+                            ),
+                          );
+                        },
+                        child: _buildBeemoNavIcon(false),
+                      ),
                       const SizedBox(width: 28),
-                      _buildNavIcon(Icons.event_note_rounded, false),
+                      GestureDetector(
+                        onTap: () {},
+                        child: _buildNavIcon(Icons.event_note_rounded, true),
+                      ),
                     ],
                   ),
                 ),
@@ -290,25 +497,37 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   Widget _buildTaskCard(Task task, String? currentUserId) {
-    final isCompleted = task.status == 'completed';
-    final isMyTask = task.assignedTo == currentUserId;
+    final status = task.status.toLowerCase();
+    final isCompleted = status == 'completed';
+    final isAwaitingPeer = status == 'pending_confirmation';
+    final isMyTask = task.assignedTo.isNotEmpty && task.assignedTo == currentUserId;
+    final canMarkDone = !isCompleted && !isAwaitingPeer && isMyTask;
+    final canPeerConfirm = isAwaitingPeer && !isMyTask && currentUserId != null;
 
     String displayText;
     Color buttonColor;
     bool canInteract;
 
     if (isCompleted) {
-      displayText = 'Completed';
+      displayText = 'Verified';
       buttonColor = Colors.black;
       canInteract = false;
-    } else if (isMyTask) {
+    } else if (canMarkDone) {
       displayText = 'Done';
       buttonColor = const Color(0xFFFF4D8D);
       canInteract = true;
-    } else {
+    } else if (canPeerConfirm) {
       displayText = 'Confirm';
       buttonColor = const Color(0xFFFF4D8D);
       canInteract = true;
+    } else if (isAwaitingPeer && isMyTask) {
+      displayText = 'Awaiting review';
+      buttonColor = Colors.black;
+      canInteract = false;
+    } else {
+      displayText = 'Waiting';
+      buttonColor = Colors.black;
+      canInteract = false;
     }
 
     return Container(
@@ -349,6 +568,29 @@ class _TasksScreenState extends State<TasksScreen> {
                       ),
                     ),
                   ],
+                  if (isAwaitingPeer) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Awaiting peer confirmation',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ],
+                  if (isCompleted && (task.confirmedByName?.trim().isNotEmpty ?? false))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Confirmed by ${task.confirmedByName}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF16A3D0),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -357,7 +599,17 @@ class _TasksScreenState extends State<TasksScreen> {
             GestureDetector(
               onTap: canInteract
                   ? () async {
-                      await _firestoreService.updateTaskStatus(task.id, 'completed');
+                      if (canMarkDone) {
+                        await _firestoreService.updateTaskStatus(
+                          task.id,
+                          'pending_confirmation',
+                        );
+                      } else if (canPeerConfirm) {
+                        await _firestoreService.updateTaskStatus(
+                          task.id,
+                          'completed',
+                        );
+                      }
                     }
                   : null,
               child: Container(

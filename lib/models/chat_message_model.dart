@@ -12,6 +12,7 @@ class ChatMessage {
   final DateTime timestamp;
   final bool isBeemo;
   final List<PollOption>? pollOptions;
+  final Map<String, dynamic>? metadata;
 
   ChatMessage({
     required this.id,
@@ -25,6 +26,7 @@ class ChatMessage {
     required this.timestamp,
     required this.isBeemo,
     this.pollOptions,
+    this.metadata,
   });
 
   factory ChatMessage.fromFirestore(DocumentSnapshot doc) {
@@ -44,6 +46,9 @@ class ChatMessage {
       pollOptions: data['pollOptions'] != null
           ? (data['pollOptions'] as List).map((opt) => PollOption.fromMap(opt as Map<String, dynamic>)).toList()
           : null,
+      metadata: data['metadata'] is Map
+          ? Map<String, dynamic>.from(data['metadata'] as Map)
+          : null,
     );
   }
 
@@ -59,6 +64,7 @@ class ChatMessage {
       'timestamp': Timestamp.fromDate(timestamp),
       'isBeemo': isBeemo,
       'pollOptions': pollOptions?.map((opt) => opt.toMap()).toList(),
+      'metadata': metadata,
     };
   }
 }

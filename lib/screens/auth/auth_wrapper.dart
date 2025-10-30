@@ -21,6 +21,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final FirestoreService _firestoreService = FirestoreService();
   String? _loadedHouseForUserId;
+  final Set<String> _restoringUserIds = {};
 
   Future<void> _loadUserHouse(String userId) async {
     if (_loadedHouseForUserId == userId) return; // Already loaded for this user
@@ -81,8 +82,42 @@ class _AuthWrapperState extends State<AuthWrapper> {
                 );
               }
 
+              final docSnapshot = snapshot.data;
+
+              if (docSnapshot == null || !docSnapshot.exists) {
+                if (!_restoringUserIds.contains(userId)) {
+                  _restoringUserIds.add(userId);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    () async {
+                      try {
+                        await _firestoreService.ensureUserDocument(
+                          userId: userId,
+                          displayName: authProvider.user?.displayName ?? '',
+                          email: authProvider.user?.email ?? '',
+                          avatarUrl: authProvider.user?.photoURL,
+                        );
+                      } finally {
+                        _restoringUserIds.remove(userId);
+                        if (mounted) {
+                          setState(() {});
+                        }
+                      }
+                    }();
+                  });
+                }
+
+                return const Scaffold(
+                  backgroundColor: Colors.white,
+                  body: Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFFFC400),
+                    ),
+                  ),
+                );
+              }
+
               // Get user status from document
-              final userData = snapshot.data?.data() as Map<String, dynamic>?;
+              final userData = docSnapshot.data() as Map<String, dynamic>?;
               final hasCompletedGetStarted = userData?['hasCompletedGetStarted'] ?? false;
               final hasCompletedAvatarSelection = userData?['hasCompletedAvatarSelection'] ?? false;
               final hasCompletedHouseSetup = userData?['hasCompletedHouseSetup'] ?? false;

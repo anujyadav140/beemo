@@ -252,10 +252,10 @@ class _DashScreenState extends State<DashScreen> {
                   StreamBuilder<QuerySnapshot>(
                     stream: houseId != null
                         ? FirebaseFirestore.instance
-                            .collection('agendaItems')
-                            .where('houseId', isEqualTo: houseId)
-                            .where('priority', isEqualTo: 'meeting')
-                            .snapshots()
+                              .collection('agendaItems')
+                              .where('houseId', isEqualTo: houseId)
+                              .where('priority', isEqualTo: 'meeting')
+                              .snapshots()
                         : null,
                     builder: (context, agendaSnapshot) {
                       final meetingAgendaCount = agendaSnapshot.hasData
@@ -289,10 +289,7 @@ class _DashScreenState extends State<DashScreen> {
                             ),
                             const SizedBox(height: 12),
                             // Tasks (pink) - Tall
-                            SizedBox(
-                              height: 200,
-                              child: _buildTasksCard(),
-                            ),
+                            SizedBox(height: 200, child: _buildTasksCard()),
                           ],
                         ),
                       ),
@@ -331,9 +328,7 @@ class _DashScreenState extends State<DashScreen> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => ChatScreen(),
-                        ),
+                        MaterialPageRoute(builder: (context) => ChatScreen()),
                       );
                     },
                     child: Container(
@@ -628,7 +623,9 @@ class _DashScreenState extends State<DashScreen> {
                                       }
 
                                       return Column(
-                                        children: messages.reversed.map((messageDoc) {
+                                        children: messages.reversed.map((
+                                          messageDoc,
+                                        ) {
                                           final messageData =
                                               messageDoc.data()
                                                   as Map<String, dynamic>?;
@@ -891,7 +888,7 @@ class _DashScreenState extends State<DashScreen> {
           children: [
             const Expanded(
               child: Text(
-    'Notes',
+                'Notes',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
@@ -909,11 +906,7 @@ class _DashScreenState extends State<DashScreen> {
                 color: Colors.black,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.edit,
-                size: 16,
-                color: Color(0xFFFFD93D),
-              ),
+              child: const Icon(Icons.edit, size: 16, color: Color(0xFFFFD93D)),
             ),
           ],
         ),
@@ -935,7 +928,14 @@ class _DashScreenState extends State<DashScreen> {
                 .snapshots()
           : null,
       builder: (context, snapshot) {
-        final tasks = snapshot.hasData ? snapshot.data!.docs : [];
+        // Filter out archived tasks to prevent duplicates
+        final tasks = snapshot.hasData
+            ? snapshot.data!.docs.where((doc) {
+                final task = doc.data() as Map<String, dynamic>;
+                final status = (task['status'] ?? '').toString().toLowerCase();
+                return status != 'archived';
+              }).toList()
+            : [];
 
         return GestureDetector(
           onTap: () {
@@ -950,7 +950,11 @@ class _DashScreenState extends State<DashScreen> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.black, width: 3),
               boxShadow: const [
-                BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0),
+                BoxShadow(
+                  color: Colors.black,
+                  offset: Offset(4, 4),
+                  blurRadius: 0,
+                ),
               ],
             ),
             padding: const EdgeInsets.all(14),
@@ -1000,16 +1004,21 @@ class _DashScreenState extends State<DashScreen> {
                           physics: const NeverScrollableScrollPhysics(),
                           child: Column(
                             children: tasks.take(3).map((taskDoc) {
-                              final task = taskDoc.data() as Map<String, dynamic>;
+                              final task =
+                                  taskDoc.data() as Map<String, dynamic>;
                               final title = task['title'] ?? 'Untitled';
-                              final status =
-                                  (task['status'] ?? '').toString().toLowerCase();
+                              final status = (task['status'] ?? '')
+                                  .toString()
+                                  .toLowerCase();
                               final isCompleted =
-                                  status == 'completed' || task['isCompleted'] == true;
+                                  status == 'completed' ||
+                                  task['isCompleted'] == true;
                               final isAwaitingConfirmation =
                                   status == 'pending_confirmation';
                               final confirmedByName =
-                                  (task['confirmedByName'] ?? '').toString().trim();
+                                  (task['confirmedByName'] ?? '')
+                                      .toString()
+                                      .trim();
 
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
@@ -1021,9 +1030,14 @@ class _DashScreenState extends State<DashScreen> {
                                       height: 20,
                                       margin: const EdgeInsets.only(top: 1),
                                       decoration: BoxDecoration(
-                                        color: isCompleted ? Colors.white : Colors.transparent,
+                                        color: isCompleted
+                                            ? Colors.white
+                                            : Colors.transparent,
                                         borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.white, width: 2.5),
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2.5,
+                                        ),
                                       ),
                                       child: isCompleted
                                           ? const Icon(
@@ -1032,22 +1046,25 @@ class _DashScreenState extends State<DashScreen> {
                                               color: Color(0xFFFF4D8D),
                                             )
                                           : isAwaitingConfirmation
-                                              ? const Icon(
-                                                  Icons.hourglass_bottom,
-                                                  size: 12,
-                                                  color: Colors.white,
-                                                )
-                                              : null,
+                                          ? const Icon(
+                                              Icons.hourglass_bottom,
+                                              size: 12,
+                                              color: Colors.white,
+                                            )
+                                          : null,
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             title,
                                             style: TextStyle(
-                                              color: isCompleted ? Colors.white70 : Colors.white,
+                                              color: isCompleted
+                                                  ? Colors.white70
+                                                  : Colors.white,
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
                                               height: 1.3,
@@ -1067,9 +1084,12 @@ class _DashScreenState extends State<DashScreen> {
                                                 ),
                                               ),
                                             ),
-                                          if (isCompleted && confirmedByName.isNotEmpty)
+                                          if (isCompleted &&
+                                              confirmedByName.isNotEmpty)
                                             Padding(
-                                              padding: const EdgeInsets.only(top: 2),
+                                              padding: const EdgeInsets.only(
+                                                top: 2,
+                                              ),
                                               child: Text(
                                                 'Confirmed by $confirmedByName',
                                                 style: const TextStyle(
@@ -1113,7 +1133,8 @@ class _DashScreenState extends State<DashScreen> {
       builder: (context, snapshot) {
         final activities = snapshot.hasData ? snapshot.data!.docs : [];
         final isLoading =
-            snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData;
+            snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData;
 
         String primaryText = 'No activity yet';
         String? secondaryText;
@@ -1121,7 +1142,9 @@ class _DashScreenState extends State<DashScreen> {
 
         if (activities.isNotEmpty) {
           final activity = activities.first.data() as Map<String, dynamic>;
-          final rawDescription = (activity['description'] ?? '').toString().trim();
+          final rawDescription = (activity['description'] ?? '')
+              .toString()
+              .trim();
           final rawTitle = (activity['title'] ?? '').toString().trim();
           final createdAt = activity['createdAt'];
 
@@ -1168,7 +1191,11 @@ class _DashScreenState extends State<DashScreen> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.black, width: 3),
               boxShadow: const [
-                BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0),
+                BoxShadow(
+                  color: Colors.black,
+                  offset: Offset(4, 4),
+                  blurRadius: 0,
+                ),
               ],
             ),
             padding: const EdgeInsets.all(14),
@@ -1217,7 +1244,9 @@ class _DashScreenState extends State<DashScreen> {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       ),
                     ),
@@ -1251,7 +1280,8 @@ class _DashScreenState extends State<DashScreen> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (secondaryText != null && secondaryText!.isNotEmpty)
+                            if (secondaryText != null &&
+                                secondaryText!.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text(
@@ -1304,7 +1334,9 @@ class _DashScreenState extends State<DashScreen> {
       builder: (context, snapshot) {
         DateTime? scheduledTime;
 
-        if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+        if (snapshot.hasData &&
+            snapshot.data != null &&
+            snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>?;
           final timestamp = data?['scheduledTime'] as Timestamp?;
           if (timestamp != null) {
@@ -1335,7 +1367,11 @@ class _DashScreenState extends State<DashScreen> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.black, width: 3),
               boxShadow: const [
-                BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0),
+                BoxShadow(
+                  color: Colors.black,
+                  offset: Offset(4, 4),
+                  blurRadius: 0,
+                ),
               ],
             ),
             padding: const EdgeInsets.all(12),
@@ -1382,7 +1418,9 @@ class _DashScreenState extends State<DashScreen> {
                         alignment: Alignment.bottomLeft,
                         fit: BoxFit.scaleDown,
                         child: ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                          constraints: BoxConstraints(
+                            maxWidth: constraints.maxWidth,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
@@ -2085,7 +2123,10 @@ class _AnimatedTasksCardState extends State<_AnimatedTasksCard> {
                       .collection('tasks')
                       .where('houseId', isEqualTo: houseId)
                       .where('assignedTo', isEqualTo: userId)
-                      .where('status', whereIn: ['pending', 'pending_confirmation'])
+                      .where(
+                        'status',
+                        whereIn: ['pending', 'pending_confirmation'],
+                      )
                       .orderBy('createdAt', descending: true)
                       .limit(1)
                       .snapshots()
@@ -2096,8 +2137,9 @@ class _AnimatedTasksCardState extends State<_AnimatedTasksCard> {
               if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
                 final taskData =
                     snapshot.data!.docs.first.data() as Map<String, dynamic>?;
-                final status =
-                    (taskData?['status'] ?? '').toString().toLowerCase();
+                final status = (taskData?['status'] ?? '')
+                    .toString()
+                    .toLowerCase();
                 final title = (taskData?['title'] ?? 'Task').toString();
                 if (status == 'pending_confirmation') {
                   taskText = 'Awaiting confirmation: $title';
@@ -2229,8 +2271,9 @@ class _AnimatedRecentActivityCardState
                           height: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         ),
                       );
@@ -2253,14 +2296,16 @@ class _AnimatedRecentActivityCardState
 
                     for (final entry in sections) {
                       if (entry.activities.isEmpty) continue;
-                      widgets.add(Text(
-                        entry.label,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white70,
+                      widgets.add(
+                        Text(
+                          entry.label,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white70,
+                          ),
                         ),
-                      ));
+                      );
                       widgets.add(const SizedBox(height: 6));
 
                       for (final activity in entry.activities) {
@@ -2362,10 +2407,7 @@ class _ActivityEmptyState extends StatelessWidget {
       child: Text(
         message,
         textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 12,
-          color: Colors.white,
-        ),
+        style: const TextStyle(fontSize: 12, color: Colors.white),
       ),
     );
   }
@@ -2397,11 +2439,7 @@ class _ActivityRow extends StatelessWidget {
                     style: const TextStyle(fontSize: 14),
                   ),
                 )
-              : Icon(
-                  presentation.icon,
-                  size: 14,
-                  color: Colors.white,
-                ),
+              : Icon(presentation.icon, size: 14, color: Colors.white),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -2424,10 +2462,7 @@ class _ActivityRow extends StatelessWidget {
             ),
             child: const Text(
               'Confirm',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-              ),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
             ),
           ),
       ],
@@ -2449,16 +2484,21 @@ class _ActivityRow extends StatelessWidget {
         );
       case 'task_created':
       case 'task_assigned':
-        final taskTitle = activity.metadata['taskTitle']?.toString() ?? activity.title;
-        final assignedTo = activity.metadata['assignedToName']?.toString() ?? '';
+        final taskTitle =
+            activity.metadata['taskTitle']?.toString() ?? activity.title;
+        final assignedTo =
+            activity.metadata['assignedToName']?.toString() ?? '';
         final assignedPhrase = assignedTo.isNotEmpty ? ' → $assignedTo' : '';
         // Check if it's an AI assignment
-        final isAIAssignment = activity.title.contains('(AI)') ||
-                                activity.description.contains('Beemo') ||
-                                activity.createdBy == 'ai_agent';
+        final isAIAssignment =
+            activity.title.contains('(AI)') ||
+            activity.description.contains('Beemo') ||
+            activity.createdBy == 'ai_agent';
         return _ActivityPresentation(
           icon: Icons.assignment,
-          color: isAIAssignment ? const Color(0xFFFFC400) : const Color(0xFF6200EA),
+          color: isAIAssignment
+              ? const Color(0xFFFFC400)
+              : const Color(0xFF6200EA),
           message: 'New task$assignedPhrase: "$taskTitle".',
           emoji: isAIAssignment ? '🤖' : null,
         );
@@ -2466,8 +2506,9 @@ class _ActivityRow extends StatelessWidget {
         final agendaTitle =
             activity.metadata['agendaTitle']?.toString() ?? activity.title;
         final priority = activity.metadata['priority']?.toString();
-        final priorityLabel =
-            priority != null ? priority.toUpperCase() : 'AGENDA';
+        final priorityLabel = priority != null
+            ? priority.toUpperCase()
+            : 'AGENDA';
         return _ActivityPresentation(
           icon: Icons.event_note,
           color: const Color(0xFFFFC400),

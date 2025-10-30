@@ -1432,6 +1432,49 @@ class FirestoreService {
     final assignedToWasRequester =
         requestedById.isNotEmpty && requestedById == assignedToId;
 
+    print('DEBUG: ========== AGENDA ASSIGNMENT START ==========');
+    print('DEBUG: Assigning agenda "$agendaTitle" to $assignedToName');
+
+    // AGGRESSIVE FIX: Find and archive ALL unassigned tasks with this title
+    print('DEBUG: Finding ALL unassigned tasks with title "$agendaTitle" in house $houseId');
+    final allTasksQuery = await _firestore.collection('tasks')
+        .where('houseId', isEqualTo: houseId)
+        .where('title', isEqualTo: agendaTitle)
+        .get();
+
+    final unassignedTasksToArchive = <String>[];
+    for (var doc in allTasksQuery.docs) {
+      final data = doc.data();
+      final assignedTo = (data['assignedTo'] ?? '').toString().trim();
+      final assignedToNameField = (data['assignedToName'] ?? '').toString().trim();
+      final status = (data['status'] ?? '').toString().toLowerCase();
+
+      // Task is unassigned if both assignedTo and assignedToName are empty AND not already archived
+      if (assignedTo.isEmpty && assignedToNameField.isEmpty && status != 'archived') {
+        print('DEBUG: Found unassigned task: ${doc.id}');
+        unassignedTasksToArchive.add(doc.id);
+      }
+    }
+
+    print('DEBUG: Found ${unassignedTasksToArchive.length} unassigned tasks to archive');
+
+    // Archive all unassigned tasks NOW before creating assigned task
+    for (var taskIdToArchive in unassignedTasksToArchive) {
+      try {
+        print('DEBUG: Archiving unassigned task $taskIdToArchive');
+        await _firestore.collection('tasks').doc(taskIdToArchive).update({
+          'status': 'archived',
+          'archivedReason': 'agenda_assigned',
+          'lastUpdated': FieldValue.serverTimestamp(),
+        });
+        print('DEBUG: Successfully archived $taskIdToArchive');
+      } catch (e) {
+        print('DEBUG: ERROR archiving task $taskIdToArchive: $e');
+      }
+    }
+
+    // Now create the assigned task
+    print('DEBUG: Creating assigned task for $assignedToName');
     final taskId = await _createTaskFromAssignment(
       houseId: houseId,
       agendaItemId: sessionId,
@@ -1443,6 +1486,9 @@ class FirestoreService {
       assignedToWasRequester: assignedToWasRequester,
       metrics: metrics,
     );
+
+    print('DEBUG: Successfully created assigned task $taskId for $assignedToName');
+    print('DEBUG: ========== AGENDA ASSIGNMENT END ==========');
 
     final updates = <String, dynamic>{
       'status': 'assigned',
@@ -2500,20 +2546,40 @@ class FirestoreService {
     };
 
     print('DEBUG: Found active session: ${sessionData['id']}');
-    print('DEBUG: Task: ${sessionData['taskTitle']}');
 
-    // Assign to volunteer
-    final success = await finalizeChatTaskWithVolunteer(
-      houseId: houseId,
-      sessionData: sessionData,
-      volunteerId: senderId,
-      volunteerName: senderName,
-    );
+    // Check if this is a chat task or agenda item
+    final sourceType = sessionData['sourceType']?.toString() ?? 'chat';
+    final taskTitle = sourceType == 'chat'
+        ? sessionData['taskTitle']?.toString() ?? 'task'
+        : sessionData['agendaTitle']?.toString() ?? 'task';
+
+    print('DEBUG: Source type: $sourceType');
+    print('DEBUG: Task/Agenda: $taskTitle');
+
+    // Call the appropriate function based on source type
+    bool success;
+    if (sourceType == 'agenda') {
+      // Agenda item volunteer
+      success = await finalizeAssignmentFromVolunteer(
+        houseId: houseId,
+        sessionData: sessionData,
+        volunteerId: senderId,
+        volunteerName: senderName,
+      );
+    } else {
+      // Chat task volunteer
+      success = await finalizeChatTaskWithVolunteer(
+        houseId: houseId,
+        sessionData: sessionData,
+        volunteerId: senderId,
+        volunteerName: senderName,
+      );
+    }
 
     if (success) {
-      print('DEBUG: Successfully assigned task to $senderName');
+      print('DEBUG: Successfully assigned $sourceType to $senderName');
     } else {
-      print('DEBUG: Failed to assign task to $senderName');
+      print('DEBUG: Failed to assign $sourceType to $senderName');
     }
   }
 }

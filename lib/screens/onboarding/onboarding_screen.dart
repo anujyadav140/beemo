@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../providers/auth_provider.dart';
 import '../../constants/colors.dart';
+import '../../widgets/beemo_logo.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -231,10 +232,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 border: Border.all(color: Colors.black, width: 3),
               ),
               child: Center(
-                child: Text(
-                  page.emoji,
-                  style: const TextStyle(fontSize: 50),
-                ),
+                child: page.emoji == '🤖'
+                    ? const BeemoLogo(size: 50)
+                    : Text(
+                        page.emoji,
+                        style: const TextStyle(fontSize: 50),
+                      ),
               ),
             ),
           ),

@@ -5,16 +5,14 @@ import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/task_model.dart';
+import '../widgets/beemo_logo.dart';
 import 'dash_screen.dart';
 import 'setup_house_screen.dart';
 
 class _TaskGroup {
-  _TaskGroup({
-    required this.key,
-    String? assignedId,
-    String? assignedName,
-  })  : assignedId = _trimOrNull(assignedId),
-        assignedName = _trimOrNull(assignedName);
+  _TaskGroup({required this.key, String? assignedId, String? assignedName})
+    : assignedId = _trimOrNull(assignedId),
+      assignedName = _trimOrNull(assignedName);
 
   final String key;
   String? assignedId;
@@ -92,13 +90,16 @@ class _TasksScreenState extends State<TasksScreen> {
         ),
       );
 
-      if ((group.assignedId == null || group.assignedId!.isEmpty) && assignedId.isNotEmpty) {
+      if ((group.assignedId == null || group.assignedId!.isEmpty) &&
+          assignedId.isNotEmpty) {
         group.assignedId = assignedId;
       }
 
       final resolvedName = _resolveMemberName(
         assignedId: assignedId.isNotEmpty ? assignedId : group.assignedId,
-        fallbackName: assignedName.isNotEmpty ? assignedName : group.assignedName,
+        fallbackName: assignedName.isNotEmpty
+            ? assignedName
+            : group.assignedName,
         houseProvider: houseProvider,
       );
 
@@ -227,9 +228,7 @@ class _TasksScreenState extends State<TasksScreen> {
     if (houseProvider.currentHouseId == null) {
       return Scaffold(
         backgroundColor: Colors.white,
-        body: const Center(
-          child: Text('Please create or join a house first'),
-        ),
+        body: const Center(child: Text('Please create or join a house first')),
       );
     }
 
@@ -240,7 +239,9 @@ class _TasksScreenState extends State<TasksScreen> {
           children: [
             Positioned.fill(
               child: StreamBuilder<List<Task>>(
-                stream: _firestoreService.getTasksStream(houseProvider.currentHouseId!),
+                stream: _firestoreService.getTasksStream(
+                  houseProvider.currentHouseId!,
+                ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -278,10 +279,14 @@ class _TasksScreenState extends State<TasksScreen> {
                                 Color houseColor = const Color(0xFF00BCD4);
 
                                 if (snapshot.hasData && snapshot.data != null) {
-                                  final houseData = snapshot.data!.data() as Map<String, dynamic>?;
-                                  houseName = houseData?['houseName'] ?? 'House';
+                                  final houseData =
+                                      snapshot.data!.data()
+                                          as Map<String, dynamic>?;
+                                  houseName =
+                                      houseData?['houseName'] ?? 'House';
                                   houseEmoji = houseData?['houseEmoji'] ?? '🏠';
-                                  final houseColorInt = houseData?['houseColor'];
+                                  final houseColorInt =
+                                      houseData?['houseColor'];
                                   if (houseColorInt != null) {
                                     houseColor = Color(houseColorInt);
                                   }
@@ -295,7 +300,10 @@ class _TasksScreenState extends State<TasksScreen> {
                                       decoration: BoxDecoration(
                                         color: houseColor,
                                         shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.black, width: 2.5),
+                                        border: Border.all(
+                                          color: Colors.black,
+                                          width: 2.5,
+                                        ),
                                       ),
                                       child: Center(
                                         child: Text(
@@ -319,16 +327,24 @@ class _TasksScreenState extends State<TasksScreen> {
                             ),
                             StreamBuilder<int>(
                               stream: currentUserId != null
-                                  ? _firestoreService.getUserPointsStream(currentUserId)
+                                  ? _firestoreService.getUserPointsStream(
+                                      currentUserId,
+                                    )
                                   : Stream.value(500),
                               builder: (context, pointsSnapshot) {
                                 final points = pointsSnapshot.data ?? 500;
                                 return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFFC400),
                                     borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(color: Colors.black, width: 2.5),
+                                    border: Border.all(
+                                      color: Colors.black,
+                                      width: 2.5,
+                                    ),
                                   ),
                                   child: Row(
                                     children: [
@@ -374,7 +390,10 @@ class _TasksScreenState extends State<TasksScreen> {
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFFFC400),
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.black, width: 2.5),
+                                  border: Border.all(
+                                    color: Colors.black,
+                                    width: 2.5,
+                                  ),
                                 ),
                                 child: const Icon(
                                   Icons.arrow_back,
@@ -448,44 +467,51 @@ class _TasksScreenState extends State<TasksScreen> {
               left: 0,
               right: 0,
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF16213E),
-                    borderRadius: BorderRadius.circular(34),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SetupHouseScreen(),
-                            ),
-                          );
-                        },
-                        child: _buildNavIcon(Icons.view_in_ar_rounded, false),
-                      ),
-                      const SizedBox(width: 28),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const DashScreen(),
-                            ),
-                          );
-                        },
-                        child: _buildBeemoNavIcon(false),
-                      ),
-                      const SizedBox(width: 28),
-                      GestureDetector(
-                        onTap: () {},
-                        child: _buildNavIcon(Icons.event_note_rounded, true),
-                      ),
-                    ],
+                child: SizedBox(
+                  height: 78,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16213E),
+                      borderRadius: BorderRadius.circular(34),
+                    ),
+                    clipBehavior: Clip.none,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const SetupHouseScreen(),
+                              ),
+                            );
+                          },
+                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const DashScreen(),
+                              ),
+                            );
+                          },
+                          child: _buildBeemoNavIcon(false),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () {},
+                          child: _buildNavIcon(Icons.event_note_rounded, true),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -500,7 +526,8 @@ class _TasksScreenState extends State<TasksScreen> {
     final status = task.status.toLowerCase();
     final isCompleted = status == 'completed';
     final isAwaitingPeer = status == 'pending_confirmation';
-    final isMyTask = task.assignedTo.isNotEmpty && task.assignedTo == currentUserId;
+    final isMyTask =
+        task.assignedTo.isNotEmpty && task.assignedTo == currentUserId;
     final canMarkDone = !isCompleted && !isAwaitingPeer && isMyTask;
     final canPeerConfirm = isAwaitingPeer && !isMyTask && currentUserId != null;
 
@@ -579,7 +606,8 @@ class _TasksScreenState extends State<TasksScreen> {
                       ),
                     ),
                   ],
-                  if (isCompleted && (task.confirmedByName?.trim().isNotEmpty ?? false))
+                  if (isCompleted &&
+                      (task.confirmedByName?.trim().isNotEmpty ?? false))
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
@@ -619,7 +647,10 @@ class _TasksScreenState extends State<TasksScreen> {
                 ),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 3, right: 3),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: buttonColor,
                     borderRadius: BorderRadius.circular(20),
@@ -644,37 +675,49 @@ class _TasksScreenState extends State<TasksScreen> {
 
   Widget _buildNavIcon(IconData icon, bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 90,
+      height: 90,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
       child: Icon(
         icon,
         color: isActive ? Colors.white : Colors.white60,
-        size: 26,
+        size: 36,
       ),
     );
   }
 
   Widget _buildBeemoNavIcon(bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 120,
+      height: 120,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
-      child: Center(
-        child: Text(
-          '🤖',
-          style: TextStyle(
-            fontSize: isActive ? 24 : 20,
-          ),
-        ),
+     child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
       ),
     );
   }

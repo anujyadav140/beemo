@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../providers/house_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/activity_model.dart';
+import '../widgets/beemo_logo.dart';
 import 'meeting_notes_screen.dart';
 import 'tasks_screen.dart';
 import 'agenda_screen.dart';
@@ -15,8 +16,11 @@ import 'timer_screen.dart';
 import 'chat_screen.dart';
 import 'next_meeting_screen.dart';
 import 'setup_house_screen.dart';
+import 'virtual_house_screen.dart';
 import 'recent_activity_screen.dart';
 import 'account_settings_screen.dart';
+import 'meeting_screen.dart';
+import 'dart:async';
 
 class DashScreen extends StatefulWidget {
   const DashScreen({super.key});
@@ -27,11 +31,278 @@ class DashScreen extends StatefulWidget {
 
 class _DashScreenState extends State<DashScreen> {
   final TextEditingController _messageController = TextEditingController();
+  Timer? _meetingPopupTimer;
+  bool _meetingPopupShown = false;
+  DateTime? _lastScheduledMeeting;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check for scheduled meeting every minute
+    _meetingPopupTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      _checkAndShowMeetingPopup();
+    });
+    // Initial check after 2 seconds
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        _checkAndShowMeetingPopup();
+      }
+    });
+  }
 
   @override
   void dispose() {
     _messageController.dispose();
+    _meetingPopupTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _checkAndShowMeetingPopup() async {
+    if (!mounted) return;
+
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+
+    if (houseId == null) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('nextMeetings')
+          .doc(houseId)
+          .get();
+
+      if (!doc.exists || !mounted) return;
+
+      final data = doc.data();
+      if (data == null) return;
+
+      final scheduledTimestamp = data['scheduledTime'] as Timestamp?;
+      if (scheduledTimestamp == null) return;
+
+      final scheduledTime = scheduledTimestamp.toDate();
+      final now = DateTime.now();
+
+      // Check if scheduled time has arrived (within 5 minute window)
+      final timeDiff = now.difference(scheduledTime).inMinutes;
+      final isTimeToMeet = timeDiff >= 0 && timeDiff <= 5;
+
+      // Only show if it's time and we haven't shown it for this meeting yet
+      if (isTimeToMeet &&
+          (_lastScheduledMeeting == null ||
+           !_isSameMeeting(scheduledTime, _lastScheduledMeeting!))) {
+        _lastScheduledMeeting = scheduledTime;
+        _meetingPopupShown = false;
+      }
+
+      if (isTimeToMeet && !_meetingPopupShown) {
+        _meetingPopupShown = true;
+        _showMeetingPopup();
+      }
+    } catch (e) {
+      // Silently fail - don't show popup on error
+      debugPrint('Error checking meeting time: $e');
+    }
+  }
+
+  bool _isSameMeeting(DateTime time1, DateTime time2) {
+    return time1.year == time2.year &&
+           time1.month == time2.month &&
+           time1.day == time2.day &&
+           time1.hour == time2.hour &&
+           (time1.minute - time2.minute).abs() < 10;
+  }
+
+  void _showMeetingPopup() {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.75),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Stack(
+            children: [
+              // Main dialog container with shadow
+              Container(
+                margin: const EdgeInsets.only(
+                  top: 50,
+                  left: 6,
+                  bottom: 6,
+                  right: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 5, right: 5),
+                  padding: const EdgeInsets.fromLTRB(28, 70, 28, 32),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFEF7),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: Colors.black, width: 3),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Title
+                      Text(
+                        'Weekly Check-in',
+                        style: TextStyle(
+                          fontFamily: 'Urbanist',
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          fontStyle: FontStyle.italic,
+                          color: Colors.black,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Message
+                      Text(
+                        'Time for your weekly house meeting!\nLet\'s discuss what matters.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'Urbanist',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF414141),
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      // Join button
+                      _buildNeobrutalistButton(
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const MeetingScreen(),
+                            ),
+                          );
+                        },
+                        backgroundColor: const Color(0xFFFFC400),
+                        textColor: Colors.black,
+                        text: 'Join Meeting',
+                        icon: Icons.video_call_rounded,
+                      ),
+                      const SizedBox(height: 14),
+                      // Dismiss button
+                      _buildNeobrutalistButton(
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                        backgroundColor: Colors.white,
+                        textColor: const Color(0xFF414141),
+                        text: 'Maybe Later',
+                        icon: Icons.close_rounded,
+                        isSecondary: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Floating Beemo icon at the top
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: const BoxDecoration(
+                      color: Colors.black,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Container(
+                      margin: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF3B79),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.black, width: 3),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF63BDA4),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.black, width: 2.5),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black,
+                                offset: Offset(3, 3),
+                              ),
+                            ],
+                          ),
+                         child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNeobrutalistButton({
+    required VoidCallback onTap,
+    required Color backgroundColor,
+    required Color textColor,
+    required String text,
+    required IconData icon,
+    bool isSecondary = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 56,
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 4, right: 4),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black, width: 3),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: textColor, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                text,
+                style: TextStyle(
+                  fontFamily: 'Urbanist',
+                  fontSize: 17,
+                  fontWeight: isSecondary ? FontWeight.w700 : FontWeight.w900,
+                  color: textColor,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -498,12 +769,10 @@ class _DashScreenState extends State<DashScreen> {
                                                 ),
                                               ),
                                               child: const Center(
-                                                child: Text(
-                                                  '🤖',
-                                                  style: TextStyle(
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
+                                                child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),
                                               ),
                                             ),
                                           ),
@@ -525,12 +794,10 @@ class _DashScreenState extends State<DashScreen> {
                                                 ),
                                               ),
                                               child: const Center(
-                                                child: Text(
-                                                  '🤖',
-                                                  style: TextStyle(
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
+                                                child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),
                                               ),
                                             ),
                                           ),
@@ -684,14 +951,17 @@ class _DashScreenState extends State<DashScreen> {
                                                     ),
                                                   ),
                                                   child: Center(
-                                                    child: Text(
-                                                      isBeemo
-                                                          ? '🤖'
-                                                          : senderAvatar,
-                                                      style: const TextStyle(
-                                                        fontSize: 13,
-                                                      ),
-                                                    ),
+                                                    child: isBeemo
+                                                        ? const BeemoLogo(
+                                                            size: 38,
+                                                          )
+                                                        : Text(
+                                                            senderAvatar,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 13,
+                                                                ),
+                                                          ),
                                                   ),
                                                 ),
                                                 const SizedBox(width: 8),
@@ -814,47 +1084,51 @@ class _DashScreenState extends State<DashScreen> {
               left: 0,
               right: 0,
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF16213E),
-                    borderRadius: BorderRadius.circular(34),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SetupHouseScreen(),
-                            ),
-                          );
-                        },
-                        child: _buildNavIcon(Icons.view_in_ar_rounded, false),
-                      ),
-                      const SizedBox(width: 28),
-                      GestureDetector(
-                        onTap: () {},
-                        child: _buildBeemoNavIcon(true),
-                      ),
-                      const SizedBox(width: 28),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AgendaScreen(),
-                            ),
-                          );
-                        },
-                        child: _buildNavIcon(Icons.event_note_rounded, false),
-                      ),
-                    ],
+                child: SizedBox(
+                  height: 78,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16213E),
+                      borderRadius: BorderRadius.circular(34),
+                    ),
+                    clipBehavior: Clip.none,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const VirtualHouseScreen(),
+                              ),
+                            );
+                          },
+                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () {},
+                          child: _buildBeemoNavIcon(true),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AgendaScreen(),
+                              ),
+                            );
+                          },
+                          child: _buildNavIcon(Icons.event_note_rounded, false),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1533,77 +1807,97 @@ class _DashScreenState extends State<DashScreen> {
 
   Widget _buildNavIcon(IconData icon, bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 90,
+      height: 90,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
       child: Icon(
         icon,
         color: isActive ? Colors.white : Colors.white60,
-        size: 26,
+        size: 36,
       ),
     );
   }
 
   Widget _buildBeemoNavIcon(bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 120,
+      height: 120,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
-      child: Center(
-        child: Text('🤖', style: TextStyle(fontSize: isActive ? 24 : 20)),
-      ),
+      child: Center(child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),),
     );
   }
 
   Widget _buildFloatingNavIcon(IconData icon, bool isActive) {
     return Container(
-      width: 56,
-      height: 56,
+      width: 90,
+      height: 90,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.white,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.black, width: 2.5),
+        border: isActive ? null : Border.all(color: Colors.black, width: 2.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: Colors.black.withOpacity(isActive ? 0.35 : 0.25),
+            blurRadius: isActive ? 16 : 12,
+            offset: Offset(0, isActive ? 8 : 6),
           ),
         ],
       ),
       child: Icon(
         icon,
         color: isActive ? Colors.white : Colors.black,
-        size: 26,
+        size: 36,
       ),
     );
   }
 
   Widget _buildFloatingBeemoNavIcon(bool isActive) {
     return Container(
-      width: 56,
-      height: 56,
+      width: 120,
+      height: 120,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.white,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.black, width: 2.5),
+        border: isActive ? null : Border.all(color: Colors.black, width: 2.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: Colors.black.withOpacity(isActive ? 0.35 : 0.25),
+            blurRadius: isActive ? 16 : 12,
+            offset: Offset(0, isActive ? 8 : 6),
           ),
         ],
       ),
-      child: Center(child: Text('🤖', style: const TextStyle(fontSize: 26))),
+      child: Center(child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),),
     );
   }
 
@@ -2432,7 +2726,9 @@ class _ActivityRow extends StatelessWidget {
             color: presentation.color,
             shape: BoxShape.circle,
           ),
-          child: presentation.emoji != null
+          child: presentation.emoji == '🤖'
+              ? const Center(child: BeemoLogo(size: 38))
+              : presentation.emoji != null
               ? Center(
                   child: Text(
                     presentation.emoji!,

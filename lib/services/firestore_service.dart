@@ -16,6 +16,42 @@ class FirestoreService {
   final Uuid _uuid = const Uuid();
   final Random _random = Random();
 
+  /// Retry helper for transient Firestore errors with exponential backoff
+  Future<T> _retryOperation<T>(
+    Future<T> Function() operation, {
+    int maxAttempts = 3,
+    Duration initialDelay = const Duration(milliseconds: 200),
+  }) async {
+    int attempt = 0;
+    Duration delay = initialDelay;
+
+    while (true) {
+      attempt++;
+      try {
+        return await operation();
+      } catch (e) {
+        // Check if it's a transient error we should retry
+        final isTransientError = e.toString().contains('unavailable') ||
+            e.toString().contains('deadline-exceeded') ||
+            e.toString().contains('UNAVAILABLE') ||
+            e.toString().contains('DEADLINE_EXCEEDED');
+
+        if (attempt >= maxAttempts || !isTransientError) {
+          print('❌ Operation failed after $attempt attempts: $e');
+          rethrow;
+        }
+
+        print('⚠️  Transient error on attempt $attempt/$maxAttempts, retrying in ${delay.inMilliseconds}ms: $e');
+        await Future.delayed(delay);
+
+        // Exponential backoff with jitter
+        delay = Duration(
+          milliseconds: (delay.inMilliseconds * 2) + _random.nextInt(100),
+        );
+      }
+    }
+  }
+
   CollectionReference<Map<String, dynamic>> _taskLedgerCollection(String houseId) {
     return _firestore.collection('houses').doc(houseId).collection('taskLedger');
   }
@@ -32,7 +68,7 @@ class FirestoreService {
     String? avatarUrl,
   }) async {
     final docRef = _firestore.collection('users').doc(userId);
-    final snapshot = await docRef.get();
+    final snapshot = await _retryOperation(() => docRef.get());
 
     if (snapshot.exists) {
       return;
@@ -204,7 +240,9 @@ class FirestoreService {
   Future<List<Map<String, String>>> getHouseMembers(String houseId) async {
     try {
       print('DEBUG [getHouseMembers]: Fetching house doc for $houseId');
-      DocumentSnapshot houseDoc = await _firestore.collection('houses').doc(houseId).get();
+      DocumentSnapshot houseDoc = await _retryOperation(
+        () => _firestore.collection('houses').doc(houseId).get(),
+      );
 
       if (!houseDoc.exists) {
         print('DEBUG [getHouseMembers]: House document does not exist!');
@@ -284,7 +322,9 @@ class FirestoreService {
         if (membersList[i]['name'] == 'Member') {
           try {
             final userId = membersList[i]['id']!;
-            final userDoc = await _firestore.collection('users').doc(userId).get();
+            final userDoc = await _retryOperation(
+              () => _firestore.collection('users').doc(userId).get(),
+            );
             if (userDoc.exists) {
               final userData = userDoc.data();
               final realName = userData?['profile']?['name']?.toString();
@@ -381,21 +421,25 @@ class FirestoreService {
     assignedTo = assignedTo ?? '';
     assignedToName = assignedToName ?? '';
 
+    // Determine status based on whether task is assigned
+    final bool isUnassigned = assignedTo.isEmpty || assignedToName.isEmpty;
+    final taskStatus = isUnassigned ? "unassigned" : "pending";
+
+    print('DEBUG [createTaskFromAI]: Creating task with status=$taskStatus, assignedTo="$assignedTo", assignedToName="$assignedToName", allowUnassigned=$allowUnassigned');
+
     final taskRef = await tasksCollection.add({
       "houseId": houseId,
       "title": title,
       "description": description,
       "assignedTo": assignedTo,
       "assignedToName": assignedToName,
-      "status": "pending",
+      "status": taskStatus,
       "dueDate": dueDate != null ? Timestamp.fromDate(dueDate) : null,
       "createdAt": FieldValue.serverTimestamp(),
       "createdBy": "ai_agent",
       "sourceMessage": sourceMessage,
       "assignmentContext": assignmentContext,
     });
-
-    final isUnassigned = assignedTo.isEmpty || assignedToName.isEmpty;
 
     await _createActivity(
       houseId: houseId,
@@ -462,84 +506,120 @@ class FirestoreService {
     required String requestedById,
     required String requestedByName,
   }) async {
-    final existingTask = await _firestore
-        .collection('tasks')
-        .where('houseId', isEqualTo: houseId)
-        .where('sourceMessage', isEqualTo: sourceMessage)
-        .limit(1)
-        .get();
-    if (existingTask.docs.isNotEmpty) {
-      return null;
-    }
+    try {
+      print('🚀 [startChatTaskSession] Starting for: "$title"');
 
-    final existingSession = await _taskAssignmentSessions(houseId)
-        .where('sourceType', isEqualTo: 'chat')
-        .where('sourceMessage', isEqualTo: sourceMessage)
-        .limit(1)
-        .get();
-    if (existingSession.docs.isNotEmpty) {
-      final doc = existingSession.docs.first;
-      final data = doc.data();
-      return {...data, 'id': doc.id};
-    }
+      // ONLY check for duplicate if there's an ACTIVE session created very recently (within 30 seconds)
+      // This prevents race conditions but ALLOWS recurring chores like "clean the table"
+      print('🔍 [startChatTaskSession] Checking for duplicate session within last 30 seconds...');
 
-    final loads = await _loadTaskLoadSnapshot(
-      houseId,
-      requesterId: requestedById,
-      requesterName: requestedByName,
-    );
-    final docRef = _taskAssignmentSessions(houseId).doc();
-    final now = DateTime.now();
-    final autoAssignAt = Timestamp.fromDate(now.add(const Duration(minutes: 2)));
-    final friendlyTitle = _sanitizeTaskLine(title, description);
+      // Get recent sessions for this source message
+      final recentSessions = await _taskAssignmentSessions(houseId)
+          .where('sourceMessage', isEqualTo: sourceMessage)
+          .limit(10)
+          .get();
 
-    final ledgerNote = _buildLedgerSnapshotNote(loads);
-    final trimmedName = requestedByName.trim();
-    final opener = trimmedName.isEmpty
-        ? 'Hey everyone, we have **"$friendlyTitle"** on the list.'
-        : 'Hey everyone, **$trimmedName** asked if anyone can **"$friendlyTitle"**.';
-    final fairnessLine = trimmedName.isEmpty
-        ? "I'll only assign it back to the requester if they're behind on recent completions."
-        : "I'll only assign it back to **$trimmedName** if they're behind on recent completions.";
-    final message = '$opener\n\nIf you can help, reply **"I\'ll take it"** to volunteer. '
-        'Otherwise I\'ll auto-assign someone fairly in about **2 minutes**. $fairnessLine$ledgerNote';
+      print('   Found ${recentSessions.docs.length} previous sessions with same message');
 
-    final messageId = await sendBeemoMessage(
-      houseId: houseId,
-      message: message,
-      metadata: {
+      // Check if any are still active and created in last 30 seconds
+      for (final doc in recentSessions.docs) {
+        final data = doc.data();
+        final createdAt = data['createdAt'] as Timestamp?;
+        final status = data['status']?.toString() ?? '';
+
+        if (createdAt != null) {
+          final createdTime = createdAt.toDate();
+          final ageInSeconds = DateTime.now().difference(createdTime).inSeconds;
+
+          print('   Session ${doc.id}: status=$status, age=${ageInSeconds}s');
+
+          if (ageInSeconds <= 30 &&
+              (status == 'awaiting_volunteers' || status == 'awaiting_confirmation')) {
+            print('⚠️  [startChatTaskSession] Active session from last 30 seconds already exists, skipping to prevent duplicate');
+            return {...data, 'id': doc.id};
+          }
+        }
+      }
+
+      print('✅ [startChatTaskSession] No recent duplicate found, creating new task!');
+
+      print('📊 [startChatTaskSession] Loading task workload snapshot...');
+      final loads = await _loadTaskLoadSnapshot(
+        houseId,
+        requesterId: requestedById,
+        requesterName: requestedByName,
+      );
+
+      final docRef = _taskAssignmentSessions(houseId).doc();
+      final now = DateTime.now();
+
+      // Get custom auto-assign duration (defaults to 2 minutes)
+      final autoAssignMinutes = await getAutoAssignMinutes(houseId);
+      final autoAssignAt = Timestamp.fromDate(now.add(Duration(minutes: autoAssignMinutes)));
+      print('⏱️  [startChatTaskSession] Auto-assign set for $autoAssignMinutes minutes');
+
+      final friendlyTitle = _sanitizeTaskLine(title, description);
+
+      final ledgerNote = _buildLedgerSnapshotNote(loads);
+      final trimmedName = requestedByName.trim();
+      final opener = trimmedName.isEmpty
+          ? 'Hey everyone, we have **"$friendlyTitle"** on the list.'
+          : 'Hey everyone, **$trimmedName** asked if anyone can **"$friendlyTitle"**.';
+      final fairnessLine = trimmedName.isEmpty
+          ? "I'll only assign it back to the requester if they're behind on recent completions."
+          : "I'll only assign it back to **$trimmedName** if they're behind on recent completions.";
+
+      // Format duration nicely
+      final durationText = autoAssignMinutes >= 60
+          ? '**${autoAssignMinutes ~/ 60} ${autoAssignMinutes ~/ 60 == 1 ? 'hour' : 'hours'}**'
+          : '**$autoAssignMinutes ${autoAssignMinutes == 1 ? 'minute' : 'minutes'}**';
+
+      final message = '$opener\n\nIf you can help, just say so (like "I\'ll take it" or "I can do that"). '
+          'Otherwise I\'ll auto-assign someone fairly in about $durationText. $fairnessLine$ledgerNote';
+
+      print('💬 [startChatTaskSession] Sending Beemo message...');
+      final messageId = await sendBeemoMessage(
+        houseId: houseId,
+        message: message,
+        metadata: {
+          'assignmentSessionId': docRef.id,
+          'autoAssignAt': autoAssignAt,
+        },
+      );
+      print('✅ [startChatTaskSession] Beemo message sent, ID: $messageId');
+
+      // Create an unassigned task immediately so it appears in the tasks list
+      print('📝 [startChatTaskSession] Creating unassigned task...');
+      final unassignedTaskId = await createTaskFromAI(
+        houseId: houseId,
+        title: title,
+        description: description,
+        assignedTo: '',
+        assignedToName: '',
+        sourceMessage: sourceMessage,
+        assignmentContext: 'awaiting_assignment',
+        allowUnassigned: true,
+        notify: false,
+      );
+      print('✅ [startChatTaskSession] Task created, ID: $unassignedTaskId');
+
+      // Create an agenda item so it appears in "This week's items"
+      print('📋 [startChatTaskSession] Creating agenda item...');
+      final agendaItemRef = await _firestore.collection('agendaItems').add({
+        'houseId': houseId,
+        'title': title,
+        'details': description,
+        'priority': 'chat',
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': requestedById,
+        'sourceMessage': sourceMessage,
         'assignmentSessionId': docRef.id,
-        'autoAssignAt': autoAssignAt,
-      },
-    );
+      });
+      print('✅ [startChatTaskSession] Agenda item created, ID: ${agendaItemRef.id}');
 
-    // Create an unassigned task immediately so it appears in the tasks list
-    final unassignedTaskId = await createTaskFromAI(
-      houseId: houseId,
-      title: title,
-      description: description,
-      assignedTo: '',
-      assignedToName: '',
-      sourceMessage: sourceMessage,
-      assignmentContext: 'awaiting_assignment',
-      allowUnassigned: true,
-      notify: false,
-    );
-
-    // Create an agenda item so it appears in "This week's items"
-    final agendaItemRef = await _firestore.collection('agendaItems').add({
-      'houseId': houseId,
-      'title': title,
-      'details': description,
-      'priority': 'chat',
-      'status': 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-      'createdBy': requestedById,
-      'sourceMessage': sourceMessage,
-      'assignmentSessionId': docRef.id,
-    });
-
-    await docRef.set({
+      print('💾 [startChatTaskSession] Saving assignment session...');
+      await docRef.set({
       'id': docRef.id,
       'houseId': houseId,
       'sourceType': 'chat',
@@ -561,20 +641,27 @@ class FirestoreService {
       'messageId': messageId,
       'unassignedTaskId': unassignedTaskId, // Track the unassigned task
     });
+      print('✅ [startChatTaskSession] Assignment session saved successfully');
 
-    return {
-      'id': docRef.id,
-      'houseId': houseId,
-      'sourceType': 'chat',
-      'status': 'awaiting_volunteers',
-      'taskTitle': title,
-      'taskDescription': description,
-      'requestedById': requestedById,
-      'requestedByName': requestedByName,
-      'sourceMessage': sourceMessage,
-      'autoAssignAt': autoAssignAt,
-      'passes': <String>[],
-    };
+      print('🎉 [startChatTaskSession] COMPLETED SUCCESSFULLY for: "$title"');
+      return {
+        'id': docRef.id,
+        'houseId': houseId,
+        'sourceType': 'chat',
+        'status': 'awaiting_volunteers',
+        'taskTitle': title,
+        'taskDescription': description,
+        'requestedById': requestedById,
+        'requestedByName': requestedByName,
+        'sourceMessage': sourceMessage,
+        'autoAssignAt': autoAssignAt,
+        'passes': <String>[],
+      };
+    } catch (e, stackTrace) {
+      print('❌ [startChatTaskSession] FAILED with error: $e');
+      print('📚 [startChatTaskSession] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   Future<bool> finalizeChatTaskWithVolunteer({
@@ -717,12 +804,41 @@ class FirestoreService {
       return false;
     }
     final status = sessionData['status']?.toString() ?? '';
-    if (status == 'assigned') {
-      print('DEBUG: Task already assigned');
+    if (status == 'assigned' || status == 'assigning') {
+      print('DEBUG: Task already assigned or being assigned (status: $status)');
       return false;
     }
 
     print('DEBUG: Auto-assigning task for session $sessionId in house $houseId');
+
+    // CRITICAL: Immediately claim this session to prevent duplicate assignments
+    // Use an atomic update to ensure only ONE call wins the race
+    print('DEBUG: Attempting to claim session with atomic status update...');
+    try {
+      final sessionRef = _taskAssignmentSessions(houseId).doc(sessionId);
+      final sessionSnapshot = await sessionRef.get();
+
+      if (!sessionSnapshot.exists) {
+        print('DEBUG: Session no longer exists, aborting');
+        return false;
+      }
+
+      final currentStatus = sessionSnapshot.data()?['status']?.toString() ?? '';
+      if (currentStatus == 'assigned' || currentStatus == 'assigning') {
+        print('DEBUG: Session already claimed by another process (status: $currentStatus)');
+        return false;
+      }
+
+      // Claim the session by updating status to 'assigning'
+      await sessionRef.update({
+        'status': 'assigning',
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+      print('DEBUG: ✅ Successfully claimed session! Proceeding with assignment...');
+    } catch (e) {
+      print('DEBUG: ❌ Failed to claim session: $e');
+      return false;
+    }
 
     final passes =
         ((sessionData['passes'] as List<dynamic>?) ?? const []).map((value) => value.toString()).toSet();
@@ -935,14 +1051,15 @@ class FirestoreService {
     print('DEBUG: Current time: $now');
     print('DEBUG: Looking for sessions with autoAssignAt <= $nowTs (with 5s buffer)');
 
-    // Get all sessions (chat AND agenda) that are ready for auto-assignment
+    // Get all sessions that are ready for auto-assignment
+    // ONLY get 'awaiting_volunteers' - this excludes 'assigning' and 'assigned'
     final query = await _taskAssignmentSessions(houseId)
         .where('status', isEqualTo: 'awaiting_volunteers')
         .where('autoAssignAt', isLessThanOrEqualTo: nowTs)
         .limit(10)
         .get();
 
-    print('DEBUG: Found ${query.docs.length} sessions ready for auto-assignment');
+    print('DEBUG: Found ${query.docs.length} sessions ready for auto-assignment (awaiting_volunteers only)');
 
     if (query.docs.isEmpty) {
       print('DEBUG: No sessions found to auto-assign');
@@ -1164,7 +1281,10 @@ class FirestoreService {
     );
     final sessionRef = _taskAssignmentSessions(houseId).doc(agendaItemId);
     final now = DateTime.now();
-    final autoAssignAt = Timestamp.fromDate(now.add(const Duration(minutes: 2)));
+
+    // Get custom auto-assign duration (defaults to 2 minutes)
+    final autoAssignMinutes = await getAutoAssignMinutes(houseId);
+    final autoAssignAt = Timestamp.fromDate(now.add(Duration(minutes: autoAssignMinutes)));
 
     // Create an unassigned task immediately (same as chat tasks)
     final unassignedTaskId = await createTaskFromAI(
@@ -1209,11 +1329,16 @@ class FirestoreService {
             .map((load) => '${load.userName}: ${load.pendingCount} pending / ${load.weeklyCount} completed wk')
             .join(', ');
 
+    // Format duration nicely
+    final durationText = autoAssignMinutes >= 60
+        ? '**${autoAssignMinutes ~/ 60} ${autoAssignMinutes ~/ 60 == 1 ? 'hour' : 'hours'}**'
+        : '**$autoAssignMinutes ${autoAssignMinutes == 1 ? 'minute' : 'minutes'}**';
+
     // Send Beemo message WITH metadata to show countdown timer
     final messageId = await sendBeemoMessage(
       houseId: houseId,
       message:
-          '$opener$detailBlock\n\nIf you can take it, reply **"I\'ll take it"**. Otherwise I\'ll auto-assign someone fairly in about **2 minutes**. '
+          '$opener$detailBlock\n\nIf you can take it, just say so (like "I\'ll take it" or "I can do that"). Otherwise I\'ll auto-assign someone fairly in about $durationText. '
           "${requesterDisplay.isNotEmpty ? "I'll only assign it back to **$requesterDisplay**" : "I\'ll only assign it back to the original requester"} if they have the lightest workload.\n\n"
           'Current workload: $summary',
       metadata: {
@@ -1235,19 +1360,37 @@ class FirestoreService {
   }
 
   Future<Map<String, dynamic>?> getActiveTaskAssignmentSession(String houseId) async {
-    final query = await _taskAssignmentSessions(houseId)
-        .orderBy('createdAt', descending: false)
-        .limit(10)
-        .get();
+    return _retryOperation(() async {
+      final query = await _taskAssignmentSessions(houseId)
+          .orderBy('createdAt', descending: false)
+          .limit(10)
+          .get();
 
-    for (final doc in query.docs) {
-      final data = doc.data();
-      final status = data['status']?.toString() ?? '';
-      if (status == 'awaiting_volunteers' || status == 'awaiting_confirmation') {
-        return {...data, 'id': doc.id};
+      for (final doc in query.docs) {
+        final data = doc.data();
+        final status = data['status']?.toString() ?? '';
+        if (status == 'awaiting_volunteers' || status == 'awaiting_confirmation') {
+          return {...data, 'id': doc.id};
+        }
       }
-    }
-    return null;
+      return null;
+    });
+  }
+
+  /// Gets ALL active task assignment sessions (awaiting volunteers)
+  /// This is used to detect ambiguity when a user volunteers for a task
+  Future<List<Map<String, dynamic>>> getAllActiveTaskAssignmentSessions(String houseId) async {
+    return _retryOperation(() async {
+      final query = await _taskAssignmentSessions(houseId)
+          .where('status', isEqualTo: 'awaiting_volunteers')
+          .orderBy('createdAt', descending: false)
+          .limit(20)
+          .get();
+
+      return query.docs.map((doc) {
+        return {...doc.data(), 'id': doc.id};
+      }).toList();
+    });
   }
 
   Future<void> recordAssignmentPass({
@@ -1966,10 +2109,12 @@ class FirestoreService {
   }
 
   Future<Map<String, dynamic>?> getMeetingPlanningSession(String houseId) async {
-    final snapshot =
-        await _firestore.collection('meetingPlanningSessions').doc(houseId).get();
-    if (!snapshot.exists) return null;
-    return snapshot.data();
+    return _retryOperation(() async {
+      final snapshot =
+          await _firestore.collection('meetingPlanningSessions').doc(houseId).get();
+      if (!snapshot.exists) return null;
+      return snapshot.data();
+    });
   }
 
   Future<void> clearMeetingPlanningSession(String houseId) async {
@@ -2091,6 +2236,7 @@ class FirestoreService {
     bool? enabled,
     DateTime? lastPromptAt,
     bool clearLastPrompt = false,
+    int? autoAssignMinutes,
   }) async {
     final Map<String, dynamic> data = {
       'updatedAt': FieldValue.serverTimestamp(),
@@ -2106,10 +2252,34 @@ class FirestoreService {
       data['lastAutoPromptAt'] = Timestamp.fromDate(lastPromptAt);
     }
 
+    if (autoAssignMinutes != null) {
+      data['autoAssignMinutes'] = autoAssignMinutes;
+    }
+
     await _firestore
         .collection('meetingAssistantSettings')
         .doc(houseId)
         .set(data, SetOptions(merge: true));
+  }
+
+  /// Get the custom auto-assign duration in minutes (defaults to 2 minutes)
+  Future<int> getAutoAssignMinutes(String houseId) async {
+    try {
+      final doc = await _firestore
+          .collection('meetingAssistantSettings')
+          .doc(houseId)
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        final minutes = doc.data()?['autoAssignMinutes'];
+        if (minutes is int && minutes > 0) {
+          return minutes;
+        }
+      }
+    } catch (e) {
+      print('Error fetching auto-assign minutes: $e');
+    }
+    return 2; // Default to 2 minutes
   }
 
   Stream<List<Meeting>> getMeetingsStream(String houseId) {
@@ -2185,12 +2355,14 @@ class FirestoreService {
   }
 
   Future<DateTime?> getNextMeetingTimeOnce(String houseId) async {
-    final doc =
-        await _firestore.collection('nextMeetings').doc(houseId).get();
-    if (!doc.exists) return null;
-    final data = doc.data();
-    if (data == null || data['scheduledTime'] == null) return null;
-    return (data['scheduledTime'] as Timestamp).toDate();
+    return _retryOperation(() async {
+      final doc =
+          await _firestore.collection('nextMeetings').doc(houseId).get();
+      if (!doc.exists) return null;
+      final data = doc.data();
+      if (data == null || data['scheduledTime'] == null) return null;
+      return (data['scheduledTime'] as Timestamp).toDate();
+    });
   }
 
   Future<void> scheduleNextMeeting({

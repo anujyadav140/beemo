@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import '../providers/auth_provider.dart';
 import '../providers/house_provider.dart';
 import '../models/house_model.dart';
@@ -58,13 +60,13 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   : null,
               builder: (context, houseSnapshot) {
                 String houseName = 'No House';
-                String houseCode = '';
+                String inviteCode = '';
                 Map<String, dynamic>? houseData;
 
                 if (houseSnapshot.hasData && houseSnapshot.data != null) {
                   houseData = houseSnapshot.data!.data() as Map<String, dynamic>?;
                   houseName = houseData?['houseName'] ?? 'No House';
-                  houseCode = houseData?['houseCode'] ?? '';
+                  inviteCode = houseData?['inviteCode'] ?? '';
                 }
 
                 final memberTiles = _collectHouseMembers(
@@ -165,6 +167,15 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                       builder: (context) => const ManageMembersScreen(),
                                     ),
                                   );
+                                },
+                              ),
+                              const Divider(height: 1, color: Colors.black26),
+                              _buildSettingItem(
+                                icon: Icons.qr_code,
+                                iconColor: const Color(0xFFE91E63),
+                                title: 'Share QR Code',
+                                onTap: () {
+                                  _showShareDialog(context, houseName, inviteCode);
                                 },
                               ),
                             ],
@@ -932,6 +943,188 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                         ),
                       ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showShareDialog(
+    BuildContext context,
+    String houseName,
+    String inviteCode,
+  ) {
+    if (inviteCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No invite code available'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final inviteUrl = 'beemo://join-house?code=$inviteCode';
+    final shareText =
+        'Join my house "$houseName" on Beemo! Use code: $inviteCode';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6, right: 6),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.black, width: 3),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Title
+                  const Text(
+                    'Invite to House',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // House Name
+                  Text(
+                    houseName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // QR Code
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.black, width: 3),
+                    ),
+                    child: QrImageView(
+                      data: inviteUrl,
+                      version: QrVersions.auto,
+                      size: 200,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // House Code
+                  const Text(
+                    'House Code',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F5F0),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.black, width: 2.5),
+                    ),
+                    child: Text(
+                      inviteCode,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        fontStyle: FontStyle.italic,
+                        letterSpacing: 2,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Share Button
+                  GestureDetector(
+                    onTap: () {
+                      Share.share(shareText);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 4, right: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00BCD4),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.black, width: 2.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.share, color: Colors.white, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Share Invite',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Close button
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),

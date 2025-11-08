@@ -70,19 +70,35 @@ class SimpleTaskDetector {
       return null; // Not a task
     }
 
-    // Filter 4: Must contain request indicators
+    // Filter 4: Check if it's an IMPERATIVE command (starts with task verb)
+    // Examples: "clean the table", "buy groceries", "take out trash"
+    bool isImperativeCommand = false;
+    for (var verb in _taskVerbs) {
+      // Check if message starts with the verb followed by space or is exactly the verb
+      // This handles: "clean the table", "clean", but NOT "cleaning supplies"
+      if (lowerMessage == verb ||
+          lowerMessage.startsWith('$verb ') ||
+          lowerMessage.startsWith('$verb\t')) {
+        isImperativeCommand = true;
+        print('Task detection: Detected imperative command starting with "$verb" - "$trimmedMessage"');
+        break;
+      }
+    }
+
+    // Filter 5: Check for request indicators
     final requestIndicators = [
       'can someone', 'could someone', 'anyone', 'someone',
       'please', 'need to', 'needs to', 'should',
       'can you', 'could you', 'would you', 'will you',
       'reminder', 'don\'t forget', 'remember to',
+      'we need', 'we should', 'lets ', 'let\'s ',
     ];
 
     final hasRequestIndicator = requestIndicators.any((indicator) =>
       lowerMessage.contains(indicator)
     );
 
-    // Filter 5: Or must directly address someone by name
+    // Filter 6: Or must directly address someone by name
     bool directlyAddressed = false;
     for (var member in houseMembers) {
       final memberName = member['name']!.toLowerCase();
@@ -95,9 +111,9 @@ class SimpleTaskDetector {
       }
     }
 
-    // Must have either a request indicator OR be directly addressed
-    if (!hasRequestIndicator && !directlyAddressed) {
-      print('Task detection: Rejected (no request indicator or direct address) - "$trimmedMessage"');
+    // Must have either: imperative command, request indicator, OR be directly addressed
+    if (!isImperativeCommand && !hasRequestIndicator && !directlyAddressed) {
+      print('Task detection: Rejected (no imperative/request indicator/direct address) - "$trimmedMessage"');
       return null; // Just a statement, not a task request
     }
 

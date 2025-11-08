@@ -13,7 +13,6 @@ class SetupHouseScreen extends StatefulWidget {
 }
 
 class _SetupHouseScreenState extends State<SetupHouseScreen> {
-  final TextEditingController _houseNameController = TextEditingController();
   final TextEditingController _bedroomsController = TextEditingController();
   final TextEditingController _bathroomsController = TextEditingController();
   bool _isFinishPressed = false;
@@ -22,9 +21,6 @@ class _SetupHouseScreenState extends State<SetupHouseScreen> {
   @override
   void initState() {
     super.initState();
-    _houseNameController.addListener(() {
-      setState(() {});
-    });
     _bedroomsController.addListener(() {
       setState(() {});
     });
@@ -35,20 +31,12 @@ class _SetupHouseScreenState extends State<SetupHouseScreen> {
 
   @override
   void dispose() {
-    _houseNameController.dispose();
     _bedroomsController.dispose();
     _bathroomsController.dispose();
     super.dispose();
   }
 
   Future<void> _handleFinish() async {
-    if (_houseNameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a house name')),
-      );
-      return;
-    }
-
     if (_bedroomsController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter number of bedrooms')),
@@ -75,8 +63,11 @@ class _SetupHouseScreenState extends State<SetupHouseScreen> {
                      authProvider.user?.email?.split('@')[0] ??
                      'User';
 
+    // Auto-generate house name
+    String houseName = "$userName's House";
+
     String? houseId = await houseProvider.createHouse(
-      name: _houseNameController.text.trim(),
+      name: houseName,
       bedrooms: int.parse(_bedroomsController.text),
       bathrooms: int.parse(_bathroomsController.text),
       userName: userName,
@@ -131,19 +122,6 @@ class _SetupHouseScreenState extends State<SetupHouseScreen> {
                           ),
                         ),
                         const SizedBox(height: 48),
-
-                        // House name question
-                        const Text(
-                          'What do you want to name\nyour house?',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w400,
-                            height: 1.3,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTextInputField(_houseNameController, 'My Awesome House'),
-                        const SizedBox(height: 32),
 
                         // Bedrooms question
                         const Text(
@@ -275,63 +253,6 @@ class _SetupHouseScreenState extends State<SetupHouseScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTextInputField(TextEditingController controller, String hint) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.black, width: 3),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: const TextStyle(
-                  color: Colors.black26,
-                  fontSize: 18,
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                fillColor: Colors.transparent,
-                filled: true,
-              ),
-              style: const TextStyle(
-                fontSize: 18,
-                color: Colors.black,
-              ),
-            ),
-          ),
-          if (controller.text.isNotEmpty)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  controller.clear();
-                });
-              },
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF4D8D),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.close,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

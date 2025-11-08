@@ -72,7 +72,7 @@ class AIService {
       final memberIds = houseMembers.map((m) => '${m['name']} (ID: ${m['id']})').join(', ');
 
       final prompt = '''
-You are a STRICT task detector for a household management app. Be CONSERVATIVE - only identify CLEAR, ACTIONABLE tasks.
+You are a task detector for a household management app. Identify ACTIONABLE tasks and chores.
 
 Message: "$message"
 Sender: $senderName
@@ -81,17 +81,23 @@ House members: $memberNames
 CRITICAL: A task MUST meet ALL these criteria:
 ✅ Contains a CLEAR action verb (clean, buy, take, fix, organize, etc.)
 ✅ Describes something SPECIFIC that needs to be done
-✅ Is a REQUEST, INSTRUCTION, or ASSIGNMENT (not a question, statement, or casual chat)
+✅ Is a REQUEST, INSTRUCTION, or ASSIGNMENT (including imperative commands)
 ✅ Is about HOUSEHOLD CHORES or RESPONSIBILITIES
+
+✅ ALWAYS RECOGNIZE AS TASKS:
+- IMPERATIVE COMMANDS: "clean the table", "buy milk", "take out trash", "fix the sink"
+- POLITE REQUESTS: "can someone clean the kitchen?", "please buy groceries"
+- ASSIGNMENTS: "John, take out the trash", "Sarah needs to vacuum"
+- SHARED ASKS: "anyone can clean the room?", "someone needs to do dishes"
 
 ❌ NOT TASKS - REJECT these immediately:
 - Greetings ("hey", "hi", "hello", "good morning")
 - Questions about status ("how's it going?", "what's up?", "anyone home?")
-- Statements of fact ("I'm going to the store", "the trash is full", "it's cold today")
+- Statements of INTENT ("I'm going to clean later", "I'll do it tomorrow")
+- Observations WITHOUT request ("the trash is full", "kitchen is messy")
 - General discussion ("I think we should...", "maybe we could...")
 - Emotional expressions ("I'm tired", "this sucks", "love you guys")
-- Plans or suggestions WITHOUT a clear request ("we should clean sometime", "thinking about organizing")
-- Reminders about existing tasks ("don't forget about X")
+- Vague suggestions ("we should clean sometime", "thinking about organizing")
 - Responses to other messages ("ok", "sure", "sounds good", "lol")
 
 House member details:
@@ -101,6 +107,10 @@ Respond ONLY with JSON (no markdown, no code blocks):
 {"isTask": boolean, "title": "string or null", "description": "string or null", "assignedTo": "name or null", "dueDate": "ISO date or null"}
 
 EXAMPLES OF TASKS (isTask: true):
+"clean the table" → {"isTask": true, "title": "Clean the table", "description": "Clean the table", "assignedTo": null, "dueDate": null}
+"clean the room" → {"isTask": true, "title": "Clean the room", "description": "Clean the room", "assignedTo": null, "dueDate": null}
+"buy groceries" → {"isTask": true, "title": "Buy groceries", "description": "Buy groceries", "assignedTo": null, "dueDate": null}
+"take out trash" → {"isTask": true, "title": "Take out trash", "description": "Take out trash", "assignedTo": null, "dueDate": null}
 "Can someone take out the trash tonight?" → {"isTask": true, "title": "Take out trash", "description": "Take out the trash tonight", "assignedTo": null, "dueDate": null}
 "John, please buy groceries by Friday" → {"isTask": true, "title": "Buy groceries", "description": "Buy groceries by Friday", "assignedTo": "John", "dueDate": null}
 "Someone needs to clean the kitchen" → {"isTask": true, "title": "Clean kitchen", "description": "Clean the kitchen", "assignedTo": null, "dueDate": null}
@@ -108,6 +118,7 @@ EXAMPLES OF TASKS (isTask: true):
 EXAMPLES OF NON-TASKS (isTask: false):
 "Hey everyone, how's it going?" → {"isTask": false, "title": null, "description": null, "assignedTo": null, "dueDate": null}
 "I'm heading to the store" → {"isTask": false, "title": null, "description": null, "assignedTo": null, "dueDate": null}
+"I'm going to clean later" → {"isTask": false, "title": null, "description": null, "assignedTo": null, "dueDate": null}
 "The trash is full" → {"isTask": false, "title": null, "description": null, "assignedTo": null, "dueDate": null}
 "What's for dinner?" → {"isTask": false, "title": null, "description": null, "assignedTo": null, "dueDate": null}
 "Anyone home?" → {"isTask": false, "title": null, "description": null, "assignedTo": null, "dueDate": null}

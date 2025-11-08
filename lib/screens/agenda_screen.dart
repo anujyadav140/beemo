@@ -7,6 +7,7 @@ import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/agenda_item_model.dart';
+import '../widgets/beemo_logo.dart';
 
 class AgendaScreen extends StatefulWidget {
   const AgendaScreen({super.key});
@@ -59,7 +60,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
     final endOfWeek = startOfWeek.add(const Duration(days: 6));
     return date.isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
-           date.isBefore(endOfWeek.add(const Duration(days: 1)));
+        date.isBefore(endOfWeek.add(const Duration(days: 1)));
   }
 
   bool _isLastWeek(DateTime date) {
@@ -68,13 +69,13 @@ class _AgendaScreenState extends State<AgendaScreen> {
     final startOfLastWeek = startOfWeek.subtract(const Duration(days: 7));
     final endOfLastWeek = startOfWeek.subtract(const Duration(days: 1));
     return date.isAfter(startOfLastWeek.subtract(const Duration(days: 1))) &&
-           date.isBefore(endOfLastWeek.add(const Duration(days: 1)));
+        date.isBefore(endOfLastWeek.add(const Duration(days: 1)));
   }
 
   bool _isSameDay(DateTime date1, DateTime date2) {
     return date1.year == date2.year &&
-           date1.month == date2.month &&
-           date1.day == date2.day;
+        date1.month == date2.month &&
+        date1.day == date2.day;
   }
 
   Color _getPriorityColor(String priority) {
@@ -115,128 +116,186 @@ class _AgendaScreenState extends State<AgendaScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              // Header with back button, title, and points
-              Row(
-                children: [
-                  GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFC400),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.black, width: 2.5),
-                            ),
-                            child: const Icon(
-                              Icons.arrow_back,
-                              color: Colors.black,
-                              size: 24,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Agenda',
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            fontStyle: FontStyle.italic,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
+                  // Header with back button, title, and points
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          width: 48,
+                          height: 48,
                           decoration: BoxDecoration(
                             color: const Color(0xFFFFC400),
-                            borderRadius: BorderRadius.circular(20),
+                            shape: BoxShape.circle,
                             border: Border.all(color: Colors.black, width: 2.5),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                '530',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.track_changes,
-                                size: 20,
+                          child: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.black,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Agenda',
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w900,
+                          fontStyle: FontStyle.italic,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFC400),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.black, width: 2.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              '530',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
                                 color: Colors.black,
                               ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Upcoming meet text
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Upcoming meet on\n${_getMonthAndDay(_weekDates.last)}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w400,
-                            height: 1.4,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AddAgendaScreen(),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFC400),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.black, width: 4),
                             ),
-                            child: const Icon(
-                              Icons.add,
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.track_changes,
+                              size: 20,
                               color: Colors.black,
-                              size: 28,
                             ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Upcoming meet text
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Upcoming meet on\n${_getMonthAndDay(_weekDates.last)}',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w400,
+                          height: 1.4,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AddAgendaScreen(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFC400),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black, width: 4),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: Colors.black,
+                            size: 28,
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
 
-                    // Date selector with agenda item indicators
-                    Consumer<HouseProvider>(
-                      builder: (context, houseProvider, _) {
-                        if (houseProvider.currentHouseId == null) {
+                  // Date selector with agenda item indicators
+                  Consumer<HouseProvider>(
+                    builder: (context, houseProvider, _) {
+                      if (houseProvider.currentHouseId == null) {
+                        return SizedBox(
+                          height: 94,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _weekDates.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(width: 12),
+                            itemBuilder: (context, index) {
+                              final date = _weekDates[index];
+                              final isToday = _isToday(date);
+
+                              // Default grey when no house/items
+                              final backgroundColor = const Color(0xFF4A4A4A);
+
+                              return _buildDatePill(
+                                _getDayName(date),
+                                date.day.toString(),
+                                backgroundColor,
+                                isToday,
+                              );
+                            },
+                          ),
+                        );
+                      }
+
+                      return StreamBuilder<List<AgendaItem>>(
+                        stream: _firestoreService.getAgendaItemsStream(
+                          houseProvider.currentHouseId!,
+                        ),
+                        builder: (context, snapshot) {
+                          // Build a map of dates that have agenda items
+                          Map<String, bool> datesWithItems = {};
+
+                          if (snapshot.hasData) {
+                            for (var item in snapshot.data!) {
+                              String dateKey =
+                                  '${item.createdAt.year}-${item.createdAt.month}-${item.createdAt.day}';
+                              datesWithItems[dateKey] = true;
+                            }
+                          }
+
                           return SizedBox(
                             height: 94,
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
                               itemCount: _weekDates.length,
-                              separatorBuilder: (context, index) => const SizedBox(width: 12),
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(width: 12),
                               itemBuilder: (context, index) {
                                 final date = _weekDates[index];
                                 final isToday = _isToday(date);
+                                final dateKey =
+                                    '${date.year}-${date.month}-${date.day}';
+                                final hasItems = datesWithItems.containsKey(
+                                  dateKey,
+                                );
+                                final dateIsThisWeek = _isThisWeek(date);
+                                final dateIsLastWeek = _isLastWeek(date);
 
-                                // Default grey when no house/items
-                                final backgroundColor = const Color(0xFF4A4A4A);
+                                Color backgroundColor;
+                                // Only days with agenda items get pink
+                                if (hasItems) {
+                                  backgroundColor = const Color(
+                                    0xFFFF4D8D,
+                                  ); // Pink only for days with agenda items
+                                } else {
+                                  backgroundColor = const Color(
+                                    0xFF4A4A4A,
+                                  ); // Grey for days without items
+                                }
 
                                 return _buildDatePill(
                                   _getDayName(date),
@@ -247,235 +306,213 @@ class _AgendaScreenState extends State<AgendaScreen> {
                               },
                             ),
                           );
-                        }
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
 
-                        return StreamBuilder<List<AgendaItem>>(
-                          stream: _firestoreService.getAgendaItemsStream(houseProvider.currentHouseId!),
-                          builder: (context, snapshot) {
-                            // Build a map of dates that have agenda items
-                            Map<String, bool> datesWithItems = {};
+                  // This weeks Items
+                  const Text(
+                    'This weeks Items',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
-                            if (snapshot.hasData) {
-                              for (var item in snapshot.data!) {
-                                String dateKey = '${item.createdAt.year}-${item.createdAt.month}-${item.createdAt.day}';
-                                datesWithItems[dateKey] = true;
-                              }
-                            }
+                  // StreamBuilder for this week's agenda items
+                  Consumer<HouseProvider>(
+                    builder: (context, houseProvider, _) {
+                      if (houseProvider.currentHouseId == null) {
+                        return const Text(
+                          'Please create or join a house first',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.black54,
+                          ),
+                        );
+                      }
 
-                            return SizedBox(
-                              height: 94,
-                              child: ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: _weekDates.length,
-                                separatorBuilder: (context, index) => const SizedBox(width: 12),
-                                itemBuilder: (context, index) {
-                                  final date = _weekDates[index];
-                                  final isToday = _isToday(date);
-                                  final dateKey = '${date.year}-${date.month}-${date.day}';
-                                  final hasItems = datesWithItems.containsKey(dateKey);
-                                  final dateIsThisWeek = _isThisWeek(date);
-                                  final dateIsLastWeek = _isLastWeek(date);
+                      return StreamBuilder<List<AgendaItem>>(
+                        stream: _firestoreService.getAgendaItemsStream(
+                          houseProvider.currentHouseId!,
+                        ),
+                        builder: (context, snapshot) {
+                          final authProvider = Provider.of<AuthProvider>(
+                            context,
+                            listen: false,
+                          );
+                          final currentUserId = authProvider.user?.uid;
 
-                                  Color backgroundColor;
-                                  // Only days with agenda items get pink
-                                  if (hasItems) {
-                                    backgroundColor = const Color(0xFFFF4D8D); // Pink only for days with agenda items
-                                  } else {
-                                    backgroundColor = const Color(0xFF4A4A4A); // Grey for days without items
-                                  }
-
-                                  return _buildDatePill(
-                                    _getDayName(date),
-                                    date.day.toString(),
-                                    backgroundColor,
-                                    isToday,
-                                  );
-                                },
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFFFFC400),
                               ),
                             );
-                          },
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 24),
+                          }
 
-                    // This weeks Items
-                    const Text(
-                      'This weeks Items',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // StreamBuilder for this week's agenda items
-                    Consumer<HouseProvider>(
-                      builder: (context, houseProvider, _) {
-                        if (houseProvider.currentHouseId == null) {
-                          return const Text(
-                            'Please create or join a house first',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                              color: Colors.black54,
-                            ),
-                          );
-                        }
-
-                        return StreamBuilder<List<AgendaItem>>(
-                          stream: _firestoreService.getAgendaItemsStream(houseProvider.currentHouseId!),
-                          builder: (context, snapshot) {
-                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                            final currentUserId = authProvider.user?.uid;
-
-                            if (snapshot.connectionState == ConnectionState.waiting) {
-                              return const Center(
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFFFFC400),
-                                ),
-                              );
-                            }
-
-                            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                              return const Text(
-                                'you haven\'t added any agenda items this week',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
-                                  color: Colors.black54,
-                                ),
-                              );
-                            }
-
-                            // Filter items from this week
-                            final thisWeekItems = snapshot.data!
-                                .where((item) => _isThisWeek(item.createdAt))
-                                .where((item) =>
-                                    item.priority != 'meeting' ||
-                                    (currentUserId != null && item.createdBy == currentUserId))
-                                .toList();
-
-                            if (thisWeekItems.isEmpty) {
-                              return const Text(
-                                'you haven\'t added any agenda items this week',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
-                                  color: Colors.black54,
-                                ),
-                              );
-                            }
-
-                            return _ExpandableAgendaList(
-                              items: thisWeekItems,
-                              getPriorityColor: _getPriorityColor,
-                              getPriorityLabel: _getPriorityLabel,
+                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const Text(
+                              'you haven\'t added any agenda items this week',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: Colors.black54,
+                              ),
                             );
-                          },
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 32),
+                          }
 
-                    // StreamBuilder for recent agenda items (not this week)
-                    Consumer<HouseProvider>(
-                      builder: (context, houseProvider, _) {
-                        if (houseProvider.currentHouseId == null) {
-                          return const SizedBox.shrink();
-                        }
+                          // Filter items from this week
+                          final thisWeekItems = snapshot.data!
+                              .where((item) => _isThisWeek(item.createdAt))
+                              .where(
+                                (item) =>
+                                    item.priority != 'meeting' ||
+                                    (currentUserId != null &&
+                                        item.createdBy == currentUserId),
+                              )
+                              .toList();
 
-                        return StreamBuilder<List<AgendaItem>>(
-                          stream: _firestoreService.getAgendaItemsStream(houseProvider.currentHouseId!),
-                          builder: (context, snapshot) {
-                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                            final currentUserId = authProvider.user?.uid;
+                          if (thisWeekItems.isEmpty) {
+                            return const Text(
+                              'you haven\'t added any agenda items this week',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: Colors.black54,
+                              ),
+                            );
+                          }
 
-                            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
+                          return _ExpandableAgendaList(
+                            items: thisWeekItems,
+                            getPriorityColor: _getPriorityColor,
+                            getPriorityLabel: _getPriorityLabel,
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 32),
 
-                            // Filter items NOT from this week
-                            final recentItems = snapshot.data!
-                                .where((item) =>
+                  // StreamBuilder for recent agenda items (not this week)
+                  Consumer<HouseProvider>(
+                    builder: (context, houseProvider, _) {
+                      if (houseProvider.currentHouseId == null) {
+                        return const SizedBox.shrink();
+                      }
+
+                      return StreamBuilder<List<AgendaItem>>(
+                        stream: _firestoreService.getAgendaItemsStream(
+                          houseProvider.currentHouseId!,
+                        ),
+                        builder: (context, snapshot) {
+                          final authProvider = Provider.of<AuthProvider>(
+                            context,
+                            listen: false,
+                          );
+                          final currentUserId = authProvider.user?.uid;
+
+                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+
+                          // Filter items NOT from this week
+                          final recentItems = snapshot.data!
+                              .where(
+                                (item) =>
                                     !_isThisWeek(item.createdAt) &&
                                     (item.priority != 'meeting' ||
-                                        (currentUserId != null && item.createdBy == currentUserId)))
-                                .take(5)
-                                .toList();
+                                        (currentUserId != null &&
+                                            item.createdBy == currentUserId)),
+                              )
+                              .take(5)
+                              .toList();
 
-                            if (recentItems.isEmpty) {
-                              return const SizedBox.shrink();
+                          if (recentItems.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+
+                          // Group by date
+                          Map<String, List<AgendaItem>> groupedByDate = {};
+                          for (var item in recentItems) {
+                            String dateKey = DateFormat(
+                              'MMMM d',
+                            ).format(item.createdAt);
+                            if (!groupedByDate.containsKey(dateKey)) {
+                              groupedByDate[dateKey] = [];
                             }
+                            groupedByDate[dateKey]!.add(item);
+                          }
 
-                            // Group by date
-                            Map<String, List<AgendaItem>> groupedByDate = {};
-                            for (var item in recentItems) {
-                              String dateKey = DateFormat('MMMM d').format(item.createdAt);
-                              if (!groupedByDate.containsKey(dateKey)) {
-                                groupedByDate[dateKey] = [];
-                              }
-                              groupedByDate[dateKey]!.add(item);
-                            }
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Recent agendas Items heading
-                                const Text(
-                                  'Recent agendas Items',
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w900,
-                                    fontStyle: FontStyle.italic,
-                                  ),
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Recent agendas Items heading
+                              const Text(
+                                'Recent agendas Items',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  fontStyle: FontStyle.italic,
                                 ),
-                                const SizedBox(height: 16),
+                              ),
+                              const SizedBox(height: 16),
 
-                                // Grouped items
-                                ...groupedByDate.entries.map((entry) {
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        entry.key,
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                              // Grouped items
+                              ...groupedByDate.entries.map((entry) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      entry.key,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
                                       ),
-                                      const SizedBox(height: 12),
-                                      ...entry.value.map((item) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(bottom: 12),
-                                          child: _buildAgendaCard(
-                                            title: item.title,
-                                            subtitle: item.details.isNotEmpty
-                                                ? item.details
-                                                : 'No details provided',
-                                            priority: item.priority,
-                                            onTap: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => AgendaDetailScreen(agendaItem: item),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        );
-                                      }).toList(),
-                                      const SizedBox(height: 12),
-                                    ],
-                                  );
-                                }).toList(),
-                              ],
-                            );
-                          },
-                        );
-                      },
-                    ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    ...entry.value.map((item) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 12,
+                                        ),
+                                        child: _buildAgendaCard(
+                                          title: item.title,
+                                          subtitle: item.details.isNotEmpty
+                                              ? item.details
+                                              : 'No details provided',
+                                          priority: item.priority,
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    AgendaDetailScreen(
+                                                      agendaItem: item,
+                                                    ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    }).toList(),
+                                    const SizedBox(height: 12),
+                                  ],
+                                );
+                              }).toList(),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
@@ -486,34 +523,42 @@ class _AgendaScreenState extends State<AgendaScreen> {
               left: 0,
               right: 0,
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF16213E),
-                    borderRadius: BorderRadius.circular(34),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).popUntil((route) => route.isFirst);
-                        },
-                        child: _buildNavIcon(Icons.view_in_ar_rounded, false),
-                      ),
-                      const SizedBox(width: 28),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).popUntil((route) => route.isFirst);
-                        },
-                        child: _buildBeemoNavIcon(false),
-                      ),
-                      const SizedBox(width: 28),
-                      _buildNavIcon(Icons.event_note_rounded, true),
-                    ],
+                child: SizedBox(
+                  height: 78,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16213E),
+                      borderRadius: BorderRadius.circular(34),
+                    ),
+                    clipBehavior: Clip.none,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(
+                              context,
+                            ).popUntil((route) => route.isFirst);
+                          },
+                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(
+                              context,
+                            ).popUntil((route) => route.isFirst);
+                          },
+                          child: _buildBeemoNavIcon(false),
+                        ),
+                        const SizedBox(width: 12),
+                        _buildNavIcon(Icons.event_note_rounded, true),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -524,18 +569,22 @@ class _AgendaScreenState extends State<AgendaScreen> {
     );
   }
 
-  Widget _buildDatePill(String dayName, String dayNumber, Color color, bool isSelected) {
+  Widget _buildDatePill(
+    String dayName,
+    String dayNumber,
+    Color color,
+    bool isSelected,
+  ) {
     return Container(
       width: 56,
       height: 94,
-      decoration: isSelected ? BoxDecoration(
-        color: const Color(0xFFFFC400), // Yellow background for today
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: Colors.black,
-          width: 4,
-        ),
-      ) : null,
+      decoration: isSelected
+          ? BoxDecoration(
+              color: const Color(0xFFFFC400), // Yellow background for today
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.black, width: 4),
+            )
+          : null,
       padding: isSelected ? const EdgeInsets.all(3) : null,
       child: Container(
         decoration: BoxDecoration(
@@ -590,37 +639,49 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
   Widget _buildNavIcon(IconData icon, bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 90,
+      height: 90,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
       child: Icon(
         icon,
         color: isActive ? Colors.white : Colors.white60,
-        size: 26,
+        size: 36,
       ),
     );
   }
 
   Widget _buildBeemoNavIcon(bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 120,
+      height: 120,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
-      child: Center(
-        child: Text(
-          '🤖',
-          style: TextStyle(
-            fontSize: isActive ? 24 : 20,
-          ),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
       ),
     );
   }
@@ -717,7 +778,8 @@ class _ExpandableAgendaListState extends State<_ExpandableAgendaList> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => AgendaDetailScreen(agendaItem: item),
+                      builder: (context) =>
+                          AgendaDetailScreen(agendaItem: item),
                     ),
                   );
                 },
@@ -758,7 +820,9 @@ class _ExpandableAgendaListState extends State<_ExpandableAgendaList> {
                   ),
                   const SizedBox(width: 8),
                   Icon(
-                    _showAll ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    _showAll
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
                     color: Colors.black,
                     size: 24,
                   ),
@@ -867,9 +931,14 @@ class _AgendaCardWidgetState extends State<_AgendaCardWidget> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: widget.getPriorityColor(widget.priority!),
+                                color: widget.getPriorityColor(
+                                  widget.priority!,
+                                ),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.black, width: 2),
+                                border: Border.all(
+                                  color: Colors.black,
+                                  width: 2,
+                                ),
                               ),
                               child: Text(
                                 widget.getPriorityLabel(widget.priority!),

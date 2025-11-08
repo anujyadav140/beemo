@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../providers/house_provider.dart';
+import '../widgets/beemo_logo.dart';
 import 'agenda_screen.dart';
 import 'setup_house_screen.dart';
 
@@ -64,9 +65,7 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
               'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800',
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: const Color(0xFF7CB342),
-                );
+                return Container(color: const Color(0xFF7CB342));
               },
             ),
           ),
@@ -84,9 +83,9 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                       StreamBuilder<DocumentSnapshot>(
                         stream: houseId != null
                             ? FirebaseFirestore.instance
-                                .collection('houses')
-                                .doc(houseId)
-                                .snapshots()
+                                  .collection('houses')
+                                  .doc(houseId)
+                                  .snapshots()
                             : null,
                         builder: (context, snapshot) {
                           String houseName = 'House';
@@ -94,7 +93,8 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                           Color houseColor = const Color(0xFF00BCD4);
 
                           if (snapshot.hasData && snapshot.data != null) {
-                            final houseData = snapshot.data!.data() as Map<String, dynamic>?;
+                            final houseData =
+                                snapshot.data!.data() as Map<String, dynamic>?;
                             houseName = houseData?['houseName'] ?? 'House';
                             houseEmoji = houseData?['houseEmoji'] ?? '🏠';
                             final houseColorInt = houseData?['houseColor'];
@@ -111,7 +111,10 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                                 decoration: BoxDecoration(
                                   color: houseColor,
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.black, width: 2.5),
+                                  border: Border.all(
+                                    color: Colors.black,
+                                    width: 2.5,
+                                  ),
                                 ),
                                 child: Center(
                                   child: Text(
@@ -229,9 +232,9 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                 StreamBuilder<DocumentSnapshot>(
                   stream: houseId != null
                       ? FirebaseFirestore.instance
-                          .collection('nextMeetings')
-                          .doc(houseId)
-                          .snapshots()
+                            .collection('nextMeetings')
+                            .doc(houseId)
+                            .snapshots()
                       : null,
                   builder: (context, snapshot) {
                     DateTime? meetingTime;
@@ -254,7 +257,9 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                           _scheduledTime = meetingTime;
                           if (meetingTime != null) {
                             final diff = meetingTime.difference(DateTime.now());
-                            _timeRemaining = diff.isNegative ? Duration.zero : diff;
+                            _timeRemaining = diff.isNegative
+                                ? Duration.zero
+                                : diff;
                           } else {
                             _timeRemaining = Duration.zero;
                           }
@@ -264,8 +269,9 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
 
                     final hasMeeting = meetingTime != null;
                     final scheduleLabel = hasMeeting
-                        ? DateFormat('EEEE, MMM d • h:mm a')
-                            .format(meetingTime!.toLocal())
+                        ? DateFormat(
+                            'EEEE, MMM d • h:mm a',
+                          ).format(meetingTime!.toLocal())
                         : 'No weekly check-in is on the calendar yet.';
                     final helperText = hasMeeting
                         ? 'Recurring check-in coordinated with Beemo.'
@@ -275,8 +281,7 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 20.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -303,8 +308,9 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                         const SizedBox(height: 24),
                         if (hasMeeting)
                           Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 20.0),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20.0,
+                            ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
@@ -329,8 +335,9 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                           )
                         else
                           Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 20.0),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20.0,
+                            ),
                             child: Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
@@ -362,49 +369,62 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20.0, top: 8.0),
                   child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF16213E),
-                        borderRadius: BorderRadius.circular(34),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const SetupHouseScreen(),
-                                ),
-                              );
-                            },
-                            child: _buildNavIcon(Icons.view_in_ar_rounded, false),
-                          ),
-                          const SizedBox(width: 28),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.of(context).popUntil((route) => route.isFirst);
-                            },
-                            child: _buildBeemoNavIcon(true),
-                          ),
-                          const SizedBox(width: 28),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const AgendaScreen(),
-                                ),
-                              );
-                            },
-                            child: _buildNavIcon(Icons.event_note_rounded, false),
-                          ),
-                        ],
+                    child: SizedBox(
+                      height: 78,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16213E),
+                          borderRadius: BorderRadius.circular(34),
+                        ),
+                        clipBehavior: Clip.none,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const SetupHouseScreen(),
+                                  ),
+                                );
+                              },
+                              child: _buildNavIcon(
+                                Icons.view_in_ar_rounded,
+                                false,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.of(
+                                  context,
+                                ).popUntil((route) => route.isFirst);
+                              },
+                              child: _buildBeemoNavIcon(true),
+                            ),
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const AgendaScreen(),
+                                  ),
+                                );
+                              },
+                              child: _buildNavIcon(
+                                Icons.event_note_rounded,
+                                false,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -459,38 +479,50 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
 
   Widget _buildNavIcon(IconData icon, bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 90,
+      height: 90,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
       child: Icon(
         icon,
         color: isActive ? Colors.white : Colors.white60,
-        size: 26,
+        size: 36,
       ),
     );
   }
 
   Widget _buildBeemoNavIcon(bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 120,
+      height: 120,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
-      child: Center(
-        child: Text(
-          '🤖',
-          style: TextStyle(
-            fontSize: isActive ? 24 : 20,
-          ),
-        ),
-      ),
+      child: Center(child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),),
     );
   }
 }

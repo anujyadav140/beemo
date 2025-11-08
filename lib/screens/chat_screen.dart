@@ -11,12 +11,10 @@ import '../services/firestore_service.dart';
 import '../services/ai_service.dart';
 import '../services/simple_task_detector.dart';
 import '../models/chat_message_model.dart';
+import '../widgets/beemo_logo.dart';
 
 class _ChatHeaderData {
-  const _ChatHeaderData({
-    required this.houseData,
-    required this.memberDocs,
-  });
+  const _ChatHeaderData({required this.houseData, required this.memberDocs});
 
   final Map<String, dynamic>? houseData;
   final List<DocumentSnapshot<Map<String, dynamic>>> memberDocs;
@@ -41,14 +39,22 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isAutoSettingsLoading = true;
   bool _isUpdatingAutoSetting = false;
   DateTime? _lastAutoPromptAt;
+  int _autoAssignMinutes = 2; // Default to 2 minutes
+  bool _isUpdatingAutoAssignTime = false;
   StreamSubscription<Map<String, dynamic>>? _autoMeetingSettingsSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-      _autoAssignCountdownSubscription;
+  _autoAssignCountdownSubscription;
   Timer? _countdownTimer;
   String? _countdownHouseId;
   final Map<String, DateTime> _assignmentDeadlines = {};
   final Map<String, String> _assignmentCountdowns = {};
   String? _autoCheckInCountdownLabel;
+  StateSetter? _meetingAssistantSheetSetState;
+
+  // Track pending task clarification
+  String? _pendingClarificationUserId;
+  String? _pendingClarificationUserName;
+  List<Map<String, dynamic>>? _pendingClarificationTasks;
 
   @override
   void initState() {
@@ -93,13 +99,22 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  void _refreshMeetingAssistantSheet() {
+    final stateSetter = _meetingAssistantSheetSetState;
+    if (stateSetter != null) {
+      try {
+        stateSetter(() {});
+      } catch (_) {
+        _meetingAssistantSheetSetState = null;
+      }
+    }
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && _scrollController.hasClients) {
-          _scrollController.jumpTo(
-            _scrollController.position.maxScrollExtent,
-          );
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
         }
       });
     });
@@ -110,13 +125,18 @@ class _ChatScreenState extends State<ChatScreen> {
     HouseProvider houseProvider, {
     String? currentUserId,
   }) async {
-    final memberIds =
-        _resolveMemberIds(houseData, houseProvider, currentUserId: currentUserId);
+    final memberIds = _resolveMemberIds(
+      houseData,
+      houseProvider,
+      currentUserId: currentUserId,
+    );
     if (memberIds.isEmpty) {
       return [];
     }
-    final futures = memberIds
-        .map((memberId) => FirebaseFirestore.instance.collection('users').doc(memberId).get());
+    final futures = memberIds.map(
+      (memberId) =>
+          FirebaseFirestore.instance.collection('users').doc(memberId).get(),
+    );
     return Future.wait(futures);
   }
 
@@ -249,31 +269,40 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       _autoMeetingSettingsSubscription?.cancel();
-      _autoMeetingSettingsSubscription =
-          _firestoreService.autoMeetingSettingsStream(houseId).listen((settings) {
-        final enabled = settings.containsKey('autoWeeklyCheckInEnabled')
-            ? (settings['autoWeeklyCheckInEnabled'] ?? false) == true
-            : true;
-        final rawLastPrompt = settings['lastAutoPromptAt'];
-        DateTime? lastPrompt;
-        if (rawLastPrompt is Timestamp) {
-          lastPrompt = rawLastPrompt.toDate();
-        } else if (rawLastPrompt is DateTime) {
-          lastPrompt = rawLastPrompt;
-        }
+      _autoMeetingSettingsSubscription = _firestoreService
+          .autoMeetingSettingsStream(houseId)
+          .listen((settings) {
+            final enabled = settings.containsKey('autoWeeklyCheckInEnabled')
+                ? (settings['autoWeeklyCheckInEnabled'] ?? false) == true
+                : true;
+            final rawLastPrompt = settings['lastAutoPromptAt'];
+            DateTime? lastPrompt;
+            if (rawLastPrompt is Timestamp) {
+              lastPrompt = rawLastPrompt.toDate();
+            } else if (rawLastPrompt is DateTime) {
+              lastPrompt = rawLastPrompt;
+            }
 
-        if (mounted) {
-          setState(() {
-            _autoCheckInEnabled = enabled;
-            _lastAutoPromptAt = lastPrompt;
-            _isAutoSettingsLoading = false;
-            _isUpdatingAutoSetting = false;
+            // Load autoAssignMinutes (defaults to 2)
+            final autoAssignMinutes = settings['autoAssignMinutes'] is int
+                ? settings['autoAssignMinutes'] as int
+                : 2;
+
+            if (mounted) {
+              setState(() {
+                _autoCheckInEnabled = enabled;
+                _lastAutoPromptAt = lastPrompt;
+                _autoAssignMinutes = autoAssignMinutes;
+                _isAutoSettingsLoading = false;
+                _isUpdatingAutoSetting = false;
+                _isUpdatingAutoAssignTime = false;
+              });
+              _refreshMeetingAssistantSheet();
+            }
+
+            _maybeTriggerAutoCheckIn();
+            _refreshCountdownLabels();
           });
-        }
-
-        _maybeTriggerAutoCheckIn();
-        _refreshCountdownLabels();
-      });
     });
   }
 
@@ -331,6 +360,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _isUpdatingAutoSetting = true;
         _autoCheckInEnabled = value;
       });
+      _refreshMeetingAssistantSheet();
       _refreshCountdownLabels();
     }
 
@@ -347,6 +377,7 @@ class _ChatScreenState extends State<ChatScreen> {
           _isUpdatingAutoSetting = false;
           _autoCheckInEnabled = previousEnabled;
         });
+        _refreshMeetingAssistantSheet();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Could not update auto check-in: $e'),
@@ -380,8 +411,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       await _firestoreService.clearMeetingPlanningSession(houseId);
-      final houseDoc =
-          await FirebaseFirestore.instance.collection('houses').doc(houseId).get();
+      final houseDoc = await FirebaseFirestore.instance
+          .collection('houses')
+          .doc(houseId)
+          .get();
       final houseData = houseDoc.data() as Map<String, dynamic>?;
       final houseName = _extractHouseName(
         houseData,
@@ -390,9 +423,13 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       final members = await _firestoreService.getHouseMembers(houseId);
-      final recentMessages =
-          await _firestoreService.fetchRecentChatMessages(houseId, limit: 20);
-      final lastMeeting = await _firestoreService.getNextMeetingTimeOnce(houseId);
+      final recentMessages = await _firestoreService.fetchRecentChatMessages(
+        houseId,
+        limit: 20,
+      );
+      final lastMeeting = await _firestoreService.getNextMeetingTimeOnce(
+        houseId,
+      );
 
       final plan = await _aiService.planWeeklyCheckInMeeting(
         houseName: houseName,
@@ -425,9 +462,12 @@ class _ChatScreenState extends State<ChatScreen> {
         );
 
         final displayTime = scheduledUtc.toLocal();
-        final fallbackSummary =
-            DateFormat('EEEE, MMM d • h:mm a').format(displayTime);
-        final summary = plan.scheduledSummary ?? 'Weekly check-in penciled in for $fallbackSummary';
+        final fallbackSummary = DateFormat(
+          'EEEE, MMM d • h:mm a',
+        ).format(displayTime);
+        final summary =
+            plan.scheduledSummary ??
+            'Weekly check-in penciled in for $fallbackSummary';
         final alreadySummarized = plan.messages.any(
           (m) => plan.scheduledSummary != null
               ? m.toLowerCase().contains(plan.scheduledSummary!.toLowerCase())
@@ -476,77 +516,168 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildAutoMeetingToggle() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(12),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFEF7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withOpacity(0.08), width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.event_repeat,
+              color: Colors.white,
+              size: 18,
+            ),
           ),
-          child: const Icon(
-            Icons.event_repeat,
-            color: Colors.white,
-            size: 18,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Auto weekly check-in',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Midweek reminder to confirm the next meeting.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.black54,
-                ),
-              ),
-              if (_autoCheckInCountdownLabel != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    _autoCheckInCountdownLabel!,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black87,
-                    ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Auto weekly check-in',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black,
                   ),
                 ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        if (_isAutoSettingsLoading || _isUpdatingAutoSetting)
-          const SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                const SizedBox(height: 4),
+                const Text(
+                  'Midweek reminder to confirm the next meeting.',
+                  style: TextStyle(fontSize: 11, color: Colors.black54),
+                ),
+                if (_autoCheckInCountdownLabel != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      _autoCheckInCountdownLabel!,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          )
-        else
-          Switch.adaptive(
-            value: _autoCheckInEnabled,
-            onChanged: (value) => _toggleAutoCheckIn(value),
-            activeColor: Colors.black,
-            activeTrackColor: const Color(0xFFFFC400),
           ),
-      ],
+          const SizedBox(width: 12),
+          if (_isAutoSettingsLoading || _isUpdatingAutoSetting)
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+              ),
+            )
+          else
+            Switch.adaptive(
+              value: _autoCheckInEnabled,
+              onChanged: (value) => _toggleAutoCheckIn(value),
+              activeColor: Colors.black,
+              activeTrackColor: const Color(0xFFFFC400),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAutoAssignTimeSetting() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFEF7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withOpacity(0.08), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.schedule, color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Auto-assign time',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'How long to wait before auto-assigning tasks',
+                  style: TextStyle(fontSize: 11, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (_isUpdatingAutoAssignTime)
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+              ),
+            )
+          else
+            GestureDetector(
+              onTap: () => _showAutoAssignTimeSelector(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFC400),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.black, width: 1.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _formatAutoAssignTime(_autoAssignMinutes),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.edit, size: 14, color: Colors.black),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -567,11 +698,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           GestureDetector(
             onTap: () => Navigator.pop(context),
-            child: const Icon(
-              Icons.arrow_back,
-              color: Colors.black,
-              size: 24,
-            ),
+            child: const Icon(Icons.arrow_back, color: Colors.black, size: 24),
           ),
           const SizedBox(width: 12),
           Container(
@@ -581,11 +708,7 @@ class _ChatScreenState extends State<ChatScreen> {
               color: Colors.grey[700],
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.public,
-              color: Colors.white70,
-              size: 20,
-            ),
+            child: const Icon(Icons.public, color: Colors.white70, size: 20),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -619,10 +742,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          _buildMeetingMenuButton(
-            enabled: menuEnabled,
-            subtle: subtleMenu,
-          ),
+          _buildMeetingMenuButton(enabled: menuEnabled, subtle: subtleMenu),
         ],
       ),
     );
@@ -662,10 +782,7 @@ class _ChatScreenState extends State<ChatScreen> {
               border: Border.all(color: Colors.black, width: 2),
             ),
             child: Center(
-              child: Text(
-                avatarEmoji,
-                style: const TextStyle(fontSize: 12),
-              ),
+              child: Text(avatarEmoji, style: const TextStyle(fontSize: 12)),
             ),
           ),
         ),
@@ -674,18 +791,12 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     avatarWidgets.add(
-      Positioned(
-        left: index * 14.0,
-        child: _buildBeemoAvatar(),
-      ),
+      Positioned(left: index * 14.0, child: _buildBeemoAvatar()),
     );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: SizedBox(
-        height: 24,
-        child: Stack(children: avatarWidgets),
-      ),
+      child: SizedBox(height: 24, child: Stack(children: avatarWidgets)),
     );
   }
 
@@ -714,11 +825,7 @@ class _ChatScreenState extends State<ChatScreen> {
               border: Border.all(color: innerBorderColor, width: 2),
             ),
             padding: const EdgeInsets.all(4),
-            child: Icon(
-              Icons.more_horiz,
-              color: iconColor,
-              size: 18,
-            ),
+            child: Icon(Icons.more_horiz, color: iconColor, size: 18),
           ),
         ),
       ),
@@ -739,44 +846,53 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.black, width: 3),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Meeting assistant',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
+        return StatefulBuilder(
+          builder: (context, modalSetState) {
+            _meetingAssistantSheetSetState = modalSetState;
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.black, width: 3),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Meeting assistant',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildAutoMeetingToggle(),
+                            const SizedBox(height: 12),
+                            _buildAutoAssignTimeSetting(),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        _buildAutoMeetingToggle(),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
-    );
+    ).whenComplete(() {
+      _meetingAssistantSheetSetState = null;
+    });
   }
 
   Future<void> _sendMessage() async {
@@ -789,12 +905,17 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    final userName = authProvider.user?.displayName ??
-                     authProvider.user?.email?.split('@')[0] ??
-                     'User';
+    final userName =
+        authProvider.user?.displayName ??
+        authProvider.user?.email?.split('@')[0] ??
+        'User';
 
     // Get user initials for avatar
-    final initials = userName.split(' ').map((n) => n.isNotEmpty ? n[0] : '').take(2).join();
+    final initials = userName
+        .split(' ')
+        .map((n) => n.isNotEmpty ? n[0] : '')
+        .take(2)
+        .join();
 
     // Use a color based on user ID hash
     final colors = [
@@ -804,7 +925,10 @@ class _ChatScreenState extends State<ChatScreen> {
       const Color(0xFFFF4D8D),
     ];
     final colorIndex = authProvider.user!.uid.hashCode % colors.length;
-    final userColor = colors[colorIndex].value.toRadixString(16).padLeft(8, '0').substring(2);
+    final userColor = colors[colorIndex].value
+        .toRadixString(16)
+        .padLeft(8, '0')
+        .substring(2);
 
     final messageText = _messageController.text.trim();
 
@@ -871,15 +995,24 @@ class _ChatScreenState extends State<ChatScreen> {
             ? simpleTask.description!.trim()
             : message;
 
-        await _firestoreService.startChatTaskSession(
-          houseId: houseId,
-          title: title.isNotEmpty ? title : 'Task',
-          description: description,
-          sourceMessage: message,
-          requestedById: senderId,
-          requestedByName: senderName,
-        );
-        print('🕒 Task session queued via simple detection: $title');
+        try {
+          print(
+            '🎯 [chat_screen] Starting task session from simple detection: "$title"',
+          );
+          await _firestoreService.startChatTaskSession(
+            houseId: houseId,
+            title: title.isNotEmpty ? title : 'Task',
+            description: description,
+            sourceMessage: message,
+            requestedById: senderId,
+            requestedByName: senderName,
+          );
+          print(
+            '✅ [chat_screen] Task session queued via simple detection: $title',
+          );
+        } catch (sessionError) {
+          print('❌ [chat_screen] FAILED to create task session: $sessionError');
+        }
         return;
       }
 
@@ -894,27 +1027,40 @@ class _ChatScreenState extends State<ChatScreen> {
         if (detectedTask.isTask &&
             detectedTask.title != null &&
             detectedTask.description != null) {
-
           final title = detectedTask.title!.trim();
           final description = detectedTask.description!.trim();
 
-          await _firestoreService.startChatTaskSession(
-            houseId: houseId,
-            title: title.isNotEmpty ? title : 'Task',
-            description: description.isNotEmpty ? description : message,
-            sourceMessage: message,
-            requestedById: senderId,
-            requestedByName: senderName,
-          );
-          print('🕒 Task session queued via AI detection: $title');
+          try {
+            print(
+              '🎯 [chat_screen] Starting task session from AI detection: "$title"',
+            );
+            await _firestoreService.startChatTaskSession(
+              houseId: houseId,
+              title: title.isNotEmpty ? title : 'Task',
+              description: description.isNotEmpty ? description : message,
+              sourceMessage: message,
+              requestedById: senderId,
+              requestedByName: senderName,
+            );
+            print(
+              '✅ [chat_screen] Task session queued via AI detection: $title',
+            );
+          } catch (sessionError) {
+            print(
+              '❌ [chat_screen] FAILED to create task session from AI: $sessionError',
+            );
+          }
         }
       } catch (aiError) {
-        print('AI detection failed (API might not be enabled): $aiError');
+        print(
+          '⚠️  [chat_screen] AI detection failed (API might not be enabled): $aiError',
+        );
         // This is OK - simple detection already ran above
       }
-    } catch (e) {
-      // Silently fail - don't interrupt the chat experience
-      print('Error analyzing message for task: $e');
+    } catch (e, stackTrace) {
+      // Log detailed error - important for debugging
+      print('❌ [chat_screen] Error analyzing message for task: $e');
+      print('📚 [chat_screen] Stack trace: $stackTrace');
     }
   }
 
@@ -927,26 +1073,90 @@ class _ChatScreenState extends State<ChatScreen> {
     final lowerMessage = message.toLowerCase().trim();
 
     try {
-      final session = await _firestoreService.getActiveTaskAssignmentSession(houseId);
+      print('🔄 Processing assignment reply: "$message" from $senderName');
+
+      // First check if we're waiting for a clarification from this user
+      if (_pendingClarificationUserId == senderId &&
+          _pendingClarificationTasks != null) {
+        print('🔍 User is responding to clarification request');
+        return await _handleClarificationResponse(
+          message,
+          senderId,
+          senderName,
+          houseId,
+        );
+      }
+
+      // Check if user is volunteering
+      if (_isVolunteerMessage(lowerMessage)) {
+        print('🙋 Recognized as volunteer message!');
+
+        // Get ALL active sessions to check for ambiguity
+        final allSessions = await _firestoreService
+            .getAllActiveTaskAssignmentSessions(houseId);
+
+        if (allSessions.isEmpty) {
+          print('⚠️  No active assignment sessions found');
+          return false;
+        }
+
+        if (allSessions.length == 1) {
+          // Only one task, assign directly
+          print('✅ Only one active task, assigning directly');
+          await _firestoreService.finalizeAssignmentFromVolunteer(
+            houseId: houseId,
+            sessionData: allSessions.first,
+            volunteerId: senderId,
+            volunteerName: senderName,
+          );
+          return true;
+        }
+
+        // Multiple tasks - check if message specifies which one
+        final matchedTask = _findMatchingTask(message, allSessions);
+
+        if (matchedTask != null) {
+          // User's message clearly matches one specific task
+          print('✅ Message matches specific task: ${matchedTask['taskTitle']}');
+          await _firestoreService.finalizeAssignmentFromVolunteer(
+            houseId: houseId,
+            sessionData: matchedTask,
+            volunteerId: senderId,
+            volunteerName: senderName,
+          );
+          return true;
+        }
+
+        // Ambiguous - ask for clarification
+        print('❓ Multiple tasks available, asking for clarification');
+        await _askForTaskClarification(
+          allSessions,
+          senderId,
+          senderName,
+          houseId,
+        );
+        return true;
+      }
+
+      // Check for other command patterns
+      final session = await _firestoreService.getActiveTaskAssignmentSession(
+        houseId,
+      );
       if (session == null) {
+        print('⚠️  No active assignment session found');
         return false;
       }
+
+      print('✅ Found active assignment session: ${session['id']}');
 
       final sessionId = session['id']?.toString();
       final status = session['status']?.toString() ?? '';
       if (sessionId == null || sessionId.isEmpty) {
+        print('⚠️  Session ID is null or empty');
         return false;
       }
 
-      if (_isVolunteerMessage(lowerMessage)) {
-        await _firestoreService.finalizeAssignmentFromVolunteer(
-          houseId: houseId,
-          sessionData: session,
-          volunteerId: senderId,
-          volunteerName: senderName,
-        );
-        return true;
-      }
+      print('📋 Session status: $status');
 
       if (_isAssignCommand(lowerMessage)) {
         await _firestoreService.proposeFairAssignment(
@@ -1002,8 +1212,7 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    final session =
-        await _firestoreService.getMeetingPlanningSession(houseId);
+    final session = await _firestoreService.getMeetingPlanningSession(houseId);
     if (session == null || session['active'] != true) {
       return;
     }
@@ -1023,9 +1232,13 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       final members = await _firestoreService.getHouseMembers(houseId);
-      final conversation =
-          await _firestoreService.fetchRecentChatMessages(houseId, limit: 40);
-      final lastMeeting = await _firestoreService.getNextMeetingTimeOnce(houseId);
+      final conversation = await _firestoreService.fetchRecentChatMessages(
+        houseId,
+        limit: 40,
+      );
+      final lastMeeting = await _firestoreService.getNextMeetingTimeOnce(
+        houseId,
+      );
 
       final plan = await _aiService.followUpWeeklyCheckIn(
         houseName: houseName,
@@ -1058,9 +1271,11 @@ class _ChatScreenState extends State<ChatScreen> {
         );
 
         final displayTime = scheduledUtc.toLocal();
-        final fallbackSummary =
-            DateFormat('EEEE, MMM d • h:mm a').format(displayTime);
-        final summary = plan.scheduledSummary ??
+        final fallbackSummary = DateFormat(
+          'EEEE, MMM d • h:mm a',
+        ).format(displayTime);
+        final summary =
+            plan.scheduledSummary ??
             '**Weekly check-in** locked for $fallbackSummary.';
         final alreadySummarized = plan.messages.any(
           (m) => plan.scheduledSummary != null
@@ -1082,7 +1297,10 @@ class _ChatScreenState extends State<ChatScreen> {
         if (plan.messages.isNotEmpty) {
           updateData['lastAssistantMessageAt'] = FieldValue.serverTimestamp();
         }
-        await _firestoreService.upsertMeetingPlanningSession(houseId, updateData);
+        await _firestoreService.upsertMeetingPlanningSession(
+          houseId,
+          updateData,
+        );
       }
 
       _scrollToBottom();
@@ -1094,38 +1312,89 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   bool _isVolunteerMessage(String message) {
-    final trimmed = message.trim();
-    if (trimmed.startsWith('i can ') ||
-        trimmed.startsWith('i will ') ||
-        trimmed.startsWith('ill ') ||
-        trimmed.startsWith("i'll ") ||
-        trimmed.startsWith('i got ') ||
-        trimmed.startsWith("i'm on it") ||
-        trimmed.startsWith('im on it')) {
-      return true;
+    final trimmed = message.trim().toLowerCase();
+
+    // Log the message being checked
+    print(
+      '🔍 Checking if volunteer message: "$message" (normalized: "$trimmed")',
+    );
+
+    // Quick prefix checks - these are the most common patterns
+    final prefixes = [
+      'i can ',
+      'i will ',
+      'ill ',
+      "i'll ",
+      'i got ',
+      "i'm on it",
+      'im on it',
+    ];
+
+    for (final prefix in prefixes) {
+      if (trimmed.startsWith(prefix)) {
+        print('✅ Matched prefix: "$prefix"');
+        return true;
+      }
     }
 
-    return _containsAnyPhrase(message, [
+    // More comprehensive phrase matching with flexible word boundaries
+    // This handles variations like "I will take that task", "I'll take it", etc.
+    final volunteerPhrases = [
+      // Take variations
       'i\'ll take',
       'ill take',
       'i will take',
       'i can take',
+      'let me take',
+      'i got the', // "i got the task", "i got the sofa"
+      // Do variations
       'i can do',
-      'i can help',
-      'i can handle',
       'i will do',
       'i\'ll do',
       'ill do',
+      'let me do',
+
+      // Help/Handle variations
+      'i can help',
+      'i will help',
+      'i can handle',
+      'i will handle',
       'i\'ll handle',
       'ill handle',
-      'i can handle',
+      'let me handle',
+
+      // Grab variations
+      'i\'ll grab',
+      'ill grab',
+      'i will grab',
+      'i can grab',
+
+      // Cover variations (for "can you cover")
+      'i\'ll cover',
+      'ill cover',
+      'i will cover',
+      'i can cover',
+
+      // Direct affirmations
       'i got it',
       'i got this',
       'count me in',
       'i volunteer',
-      'i\'ll grab',
-      'ill grab',
-    ]);
+      'i\'m in',
+      'im in',
+      'sign me up',
+      'put me down',
+    ];
+
+    for (final phrase in volunteerPhrases) {
+      if (trimmed.contains(phrase)) {
+        print('✅ Matched phrase: "$phrase"');
+        return true;
+      }
+    }
+
+    print('❌ Not recognized as volunteer message');
+    return false;
   }
 
   bool _isAssignCommand(String message) {
@@ -1156,11 +1425,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   bool _isNegativeMessage(String message) {
-    return _containsAnyWord(message, [
-          'no',
-          'nah',
-          'wait',
-        ]) ||
+    return _containsAnyWord(message, ['no', 'nah', 'wait']) ||
         _containsAnyPhrase(message, [
           'hold on',
           'not yet',
@@ -1170,9 +1435,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   bool _isPassMessage(String message) {
-    return _containsAnyWord(message, [
-          'pass',
-        ]) ||
+    return _containsAnyWord(message, ['pass']) ||
         _containsAnyPhrase(message, [
           'not me',
           'cant',
@@ -1210,21 +1473,21 @@ class _ChatScreenState extends State<ChatScreen> {
     final currentUserId = authProvider.user?.uid;
     final Stream<_ChatHeaderData>? headerStream = houseId != null
         ? FirebaseFirestore.instance
-            .collection('houses')
-            .doc(houseId)
-            .snapshots()
-            .asyncMap((houseDoc) async {
-              final houseData = houseDoc.data() as Map<String, dynamic>?;
-              final memberDocs = await _fetchMemberDocs(
-                houseData,
-                houseProvider,
-                currentUserId: currentUserId,
-              );
-              return _ChatHeaderData(
-                houseData: houseData,
-                memberDocs: memberDocs,
-              );
-            })
+              .collection('houses')
+              .doc(houseId)
+              .snapshots()
+              .asyncMap((houseDoc) async {
+                final houseData = houseDoc.data() as Map<String, dynamic>?;
+                final memberDocs = await _fetchMemberDocs(
+                  houseData,
+                  houseProvider,
+                  currentUserId: currentUserId,
+                );
+                return _ChatHeaderData(
+                  houseData: houseData,
+                  memberDocs: memberDocs,
+                );
+              })
         : null;
 
     return Scaffold(
@@ -1257,7 +1520,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       final headerInfo = snapshot.data;
                       final houseData = headerInfo?.houseData;
                       final memberDocs =
-                          headerInfo?.memberDocs ?? const <DocumentSnapshot<Map<String, dynamic>>>[];
+                          headerInfo?.memberDocs ??
+                          const <DocumentSnapshot<Map<String, dynamic>>>[];
                       final houseName = _extractHouseName(
                         houseData,
                         houseProvider,
@@ -1270,8 +1534,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       final subtitle = memberNames.isNotEmpty
                           ? _formatMemberNameList(memberNames)
                           : (snapshot.connectionState == ConnectionState.waiting
-                              ? 'Loading members...'
-                              : 'Beemo');
+                                ? 'Loading members...'
+                                : 'Beemo');
 
                       return Column(
                         children: [
@@ -1295,15 +1559,15 @@ class _ChatScreenState extends State<ChatScreen> {
                         subtleMenu: true,
                       ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                         child: SizedBox(
                           height: 24,
                           child: Stack(
                             children: [
-                              Positioned(
-                                left: 0,
-                                child: _buildBeemoAvatar(),
-                              ),
+                              Positioned(left: 0, child: _buildBeemoAvatar()),
                             ],
                           ),
                         ),
@@ -1325,7 +1589,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       }
 
                       return StreamBuilder<List<ChatMessage>>(
-                        stream: _firestoreService.getChatMessagesStream(houseProvider.currentHouseId!),
+                        stream: _firestoreService.getChatMessagesStream(
+                          houseProvider.currentHouseId!,
+                        ),
                         builder: (context, snapshot) {
                           if (snapshot.hasError) {
                             return Center(
@@ -1337,7 +1603,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           }
 
                           final messages = snapshot.data ?? [];
-                          final authProvider = Provider.of<AuthProvider>(context);
+                          final authProvider = Provider.of<AuthProvider>(
+                            context,
+                          );
                           final currentUserId = authProvider.user?.uid;
 
                           // Auto-scroll to bottom when new messages arrive
@@ -1376,17 +1644,18 @@ class _ChatScreenState extends State<ChatScreen> {
                               }
 
                               final message = messages[index];
-                              final isCurrentUser = message.senderId == currentUserId;
+                              final isCurrentUser =
+                                  message.senderId == currentUserId;
                               final isBeemo = message.isBeemo;
 
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildMessageWidget(
-                            message,
-                            isCurrentUser,
-                            isBeemo,
-                          ),
-                        );
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: _buildMessageWidget(
+                                  message,
+                                  isCurrentUser,
+                                  isBeemo,
+                                ),
+                              );
                             },
                           );
                         },
@@ -1403,7 +1672,10 @@ class _ChatScreenState extends State<ChatScreen> {
               left: 12,
               right: 12,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(39),
@@ -1425,7 +1697,9 @@ class _ChatScreenState extends State<ChatScreen> {
                               border: InputBorder.none,
                               enabledBorder: InputBorder.none,
                               focusedBorder: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(vertical: 12),
+                              contentPadding: EdgeInsets.symmetric(
+                                vertical: 12,
+                              ),
                             ),
                             style: const TextStyle(
                               fontSize: 16,
@@ -1466,7 +1740,11 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageWidget(ChatMessage message, bool isCurrentUser, bool isBeemo) {
+  Widget _buildMessageWidget(
+    ChatMessage message,
+    bool isCurrentUser,
+    bool isBeemo,
+  ) {
     if (isBeemo && message.messageType == 'poll') {
       return _buildFirebasePoll(message);
     } else if (isBeemo) {
@@ -1477,7 +1755,9 @@ class _ChatScreenState extends State<ChatScreen> {
       // Parse color from hex string
       Color avatarColor;
       try {
-        avatarColor = Color(int.parse(message.senderColor.replaceFirst('#', '0xFF')));
+        avatarColor = Color(
+          int.parse(message.senderColor.replaceFirst('#', '0xFF')),
+        );
       } catch (e) {
         avatarColor = const Color(0xFF16A3D0); // Default color
       }
@@ -1491,7 +1771,11 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Widget _buildAvatar(String letter, Color color, {Color textColor = Colors.white}) {
+  Widget _buildAvatar(
+    String letter,
+    Color color, {
+    Color textColor = Colors.white,
+  }) {
     return Container(
       width: 24,
       height: 24,
@@ -1522,11 +1806,9 @@ class _ChatScreenState extends State<ChatScreen> {
         shape: BoxShape.circle,
         border: Border.all(color: Colors.black, width: 2),
       ),
-      child: const Center(
-        child: Text(
-          '🤖',
-          style: TextStyle(fontSize: 12),
-        ),
+     child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
       ),
     );
   }
@@ -1534,8 +1816,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildBeemoMessage(ChatMessage message) {
     // Show countdown ONLY below the specific message that asks about the task
     final sessionId = message.metadata?['assignmentSessionId']?.toString();
-    final countdownLabel =
-        sessionId != null ? _assignmentCountdowns[sessionId] : null;
+    final countdownLabel = sessionId != null
+        ? _assignmentCountdowns[sessionId]
+        : null;
 
     // Check if task has been assigned
     final taskAssigned = message.metadata?['taskAssigned'] == true;
@@ -1552,12 +1835,10 @@ class _ChatScreenState extends State<ChatScreen> {
             shape: BoxShape.circle,
             border: Border.all(color: Colors.black, width: 2),
           ),
-          child: const Center(
-            child: Text(
-              '🤖',
-              style: TextStyle(fontSize: 12),
-            ),
-          ),
+          child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -1584,22 +1865,23 @@ class _ChatScreenState extends State<ChatScreen> {
                   data: message.message,
                   shrinkWrap: true,
                   softLineBreak: true,
-                  styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                    p: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.black,
-                      height: 1.35,
-                    ),
-                    strong: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.black,
-                    ),
-                    listBullet: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.black,
-                    ),
-                  ),
+                  styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
+                      .copyWith(
+                        p: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black,
+                          height: 1.35,
+                        ),
+                        strong: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black,
+                        ),
+                        listBullet: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black,
+                        ),
+                      ),
                 ),
                 if (taskAssigned && assignedToName != null) ...[
                   const SizedBox(height: 10),
@@ -1610,7 +1892,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 2, right: 2),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF63BDA4),
                         borderRadius: BorderRadius.circular(12),
@@ -1667,7 +1952,13 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildUserMessage(String avatar, String name, String text, Color avatarColor, {Color textColor = Colors.white}) {
+  Widget _buildUserMessage(
+    String avatar,
+    String name,
+    String text,
+    Color avatarColor, {
+    Color textColor = Colors.white,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1740,12 +2031,10 @@ class _ChatScreenState extends State<ChatScreen> {
             shape: BoxShape.circle,
             border: Border.all(color: Colors.black, width: 2),
           ),
-          child: const Center(
-            child: Text(
-              '🤖',
-              style: TextStyle(fontSize: 12),
-            ),
-          ),
+         child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -1770,10 +2059,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 const SizedBox(height: 4),
                 Text(
                   message.message,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.black,
-                  ),
+                  style: const TextStyle(fontSize: 14, color: Colors.black),
                 ),
                 const SizedBox(height: 8),
                 ...(message.pollOptions ?? []).asMap().entries.map((entry) {
@@ -1791,7 +2077,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             width: 10,
                             height: 10,
                             decoration: BoxDecoration(
-                              color: option.votes.isNotEmpty ? const Color(0xFFFFC400) : Colors.black,
+                              color: option.votes.isNotEmpty
+                                  ? const Color(0xFFFFC400)
+                                  : Colors.black,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -1829,12 +2117,10 @@ class _ChatScreenState extends State<ChatScreen> {
             shape: BoxShape.circle,
             border: Border.all(color: Colors.black, width: 2),
           ),
-          child: const Center(
-            child: Text(
-              '🤖',
-              style: TextStyle(fontSize: 12),
-            ),
-          ),
+         child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -1859,10 +2145,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 const SizedBox(height: 4),
                 const Text(
                   "let's poll",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.black),
                 ),
                 const SizedBox(height: 8),
                 _buildPollOption('Friday : 9 am'),
@@ -1891,13 +2174,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          text,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Colors.black,
-          ),
-        ),
+        Text(text, style: const TextStyle(fontSize: 14, color: Colors.black)),
       ],
     );
   }
@@ -1941,10 +2218,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           child: Text(
             text,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.black,
-            ),
+            style: const TextStyle(fontSize: 14, color: Colors.black),
           ),
         ),
       ],
@@ -1961,40 +2235,40 @@ class _ChatScreenState extends State<ChatScreen> {
         .orderBy('autoAssignAt')
         .snapshots()
         .listen((snapshot) {
-      final newDeadlines = <String, DateTime>{};
-      final now = DateTime.now();
+          final newDeadlines = <String, DateTime>{};
+          final now = DateTime.now();
 
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final sourceType = data['sourceType']?.toString() ?? '';
+          for (final doc in snapshot.docs) {
+            final data = doc.data();
+            final sourceType = data['sourceType']?.toString() ?? '';
 
-        // Only track chat and agenda items (not other sourceTypes)
-        if (sourceType != 'chat' && sourceType != 'agenda') {
-          continue;
-        }
+            // Only track chat and agenda items (not other sourceTypes)
+            if (sourceType != 'chat' && sourceType != 'agenda') {
+              continue;
+            }
 
-        final autoAssignAt = data['autoAssignAt'];
-        DateTime? deadline;
-        if (autoAssignAt is Timestamp) {
-          deadline = autoAssignAt.toDate();
-        } else if (autoAssignAt is DateTime) {
-          deadline = autoAssignAt;
-        }
-        if (deadline != null) {
-          newDeadlines[doc.id] = deadline;
+            final autoAssignAt = data['autoAssignAt'];
+            DateTime? deadline;
+            if (autoAssignAt is Timestamp) {
+              deadline = autoAssignAt.toDate();
+            } else if (autoAssignAt is DateTime) {
+              deadline = autoAssignAt;
+            }
+            if (deadline != null) {
+              newDeadlines[doc.id] = deadline;
 
-          // Trigger auto-assignment if deadline has passed
-          if (deadline.isBefore(now) || deadline.isAtSameMomentAs(now)) {
-            _triggerAutoAssignment(houseId);
+              // Trigger auto-assignment if deadline has passed
+              if (deadline.isBefore(now) || deadline.isAtSameMomentAs(now)) {
+                _triggerAutoAssignment(houseId);
+              }
+            }
           }
-        }
-      }
 
-      _assignmentDeadlines
-        ..clear()
-        ..addAll(newDeadlines);
-      _refreshCountdownLabels();
-    });
+          _assignmentDeadlines
+            ..clear()
+            ..addAll(newDeadlines);
+          _refreshCountdownLabels();
+        });
   }
 
   Future<void> _triggerAutoAssignment(String houseId) async {
@@ -2016,30 +2290,212 @@ class _ChatScreenState extends State<ChatScreen> {
     final triggeredThisWeek =
         _lastAutoPromptAt != null && _isSameWeek(now, _lastAutoPromptAt!);
 
-    final inWindow = now.weekday >= DateTime.wednesday &&
+    final inWindow =
+        now.weekday >= DateTime.wednesday &&
         now.weekday <= DateTime.thursday &&
         !triggeredThisWeek;
     if (inWindow) {
       return now;
     }
 
-    DateTime reference = now;
-    if (triggeredThisWeek) {
-      reference = reference.add(const Duration(days: 7));
+    // If triggered this week, next check is midweek of NEXT week (7 days from last trigger)
+    if (triggeredThisWeek && _lastAutoPromptAt != null) {
+      // Simple: add 7 days to the last prompt to get next week's midweek
+      return _lastAutoPromptAt!.add(const Duration(days: 7));
     }
 
-    final normalized = DateTime(reference.year, reference.month, reference.day);
+    // Otherwise, find the next Wednesday (midweek)
+    final normalized = DateTime(now.year, now.month, now.day);
     const int daysPerWeek = 7;
     int daysToAdd = (DateTime.wednesday - normalized.weekday) % daysPerWeek;
+
+    // If we're already past Wednesday this week, go to next week's Wednesday
     if (daysToAdd <= 0) {
       daysToAdd += daysPerWeek;
     }
+
     final candidate = normalized.add(Duration(days: daysToAdd));
-    DateTime target = DateTime(candidate.year, candidate.month, candidate.day, 10);
+    DateTime target = DateTime(
+      candidate.year,
+      candidate.month,
+      candidate.day,
+      10,
+    );
+
+    // Safety check: if target is in the past, move to next week
     if (target.isBefore(now)) {
       target = target.add(const Duration(days: 7));
     }
+
     return target;
+  }
+
+  String _formatAutoAssignTime(int minutes) {
+    if (minutes >= 60) {
+      final hours = minutes ~/ 60;
+      return '${hours}h';
+    }
+    return '${minutes}m';
+  }
+
+  Future<void> _showAutoAssignTimeSelector() async {
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+    if (houseId == null) return;
+
+    final options = [
+      {'value': 2, 'label': '2 minutes'},
+      {'value': 5, 'label': '5 minutes'},
+      {'value': 10, 'label': '10 minutes'},
+      {'value': 15, 'label': '15 minutes'},
+      {'value': 30, 'label': '30 minutes'},
+      {'value': 60, 'label': '1 hour'},
+      {'value': 120, 'label': '2 hours'},
+    ];
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFFEF7),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Auto-assign time limit',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...options.map((option) {
+              final value = option['value'] as int;
+              final label = option['label'] as String;
+              final isSelected = value == _autoAssignMinutes;
+
+              return InkWell(
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _updateAutoAssignTime(value);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFFFFC400).withOpacity(0.2)
+                        : Colors.transparent,
+                    border: Border(
+                      top: BorderSide(
+                        color: Colors.black.withOpacity(0.05),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                      if (isSelected)
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFC400),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.black, width: 1.5),
+                          ),
+                          child: const Icon(
+                            Icons.check,
+                            size: 16,
+                            color: Colors.black,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateAutoAssignTime(int minutes) async {
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+    if (houseId == null) return;
+
+    // Store previous value for rollback on error
+    final previousMinutes = _autoAssignMinutes;
+
+    // Optimistically update UI immediately
+    setState(() {
+      _autoAssignMinutes = minutes;
+      _isUpdatingAutoAssignTime = true;
+    });
+    _refreshMeetingAssistantSheet();
+
+    try {
+      await _firestoreService.updateAutoMeetingSettings(
+        houseId,
+        autoAssignMinutes: minutes,
+      );
+
+      // Success - update completes via Firestore stream
+      if (mounted) {
+        setState(() {
+          _isUpdatingAutoAssignTime = false;
+        });
+        _refreshMeetingAssistantSheet();
+      }
+    } catch (e) {
+      // Revert to previous value on error
+      if (mounted) {
+        setState(() {
+          _autoAssignMinutes = previousMinutes;
+          _isUpdatingAutoAssignTime = false;
+        });
+        _refreshMeetingAssistantSheet();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not update auto-assign time: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   String _formatDuration(Duration duration) {
@@ -2093,7 +2549,8 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    final shouldRunTimer = newAssignmentLabels.isNotEmpty ||
+    final shouldRunTimer =
+        newAssignmentLabels.isNotEmpty ||
         (checkLabel != null && checkLabel != 'Auto check-in running now');
     if (shouldRunTimer) {
       _countdownTimer ??= Timer.periodic(
@@ -2107,9 +2564,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final assignmentsChanged =
         newAssignmentLabels.length != _assignmentCountdowns.length ||
-            newAssignmentLabels.entries.any(
-              (entry) => _assignmentCountdowns[entry.key] != entry.value,
-            );
+        newAssignmentLabels.entries.any(
+          (entry) => _assignmentCountdowns[entry.key] != entry.value,
+        );
 
     if (assignmentsChanged || checkLabel != _autoCheckInCountdownLabel) {
       setState(() {
@@ -2118,15 +2575,210 @@ class _ChatScreenState extends State<ChatScreen> {
           ..addAll(newAssignmentLabels);
         _autoCheckInCountdownLabel = checkLabel;
       });
+      _refreshMeetingAssistantSheet();
+    }
+  }
+
+  /// Tries to find a task that matches the user's message
+  /// Returns the matched task or null if ambiguous
+  Map<String, dynamic>? _findMatchingTask(
+    String message,
+    List<Map<String, dynamic>> tasks,
+  ) {
+    final lowerMessage = message.toLowerCase().trim();
+
+    // Extract keywords from the message (remove volunteer phrases)
+    String cleanedMessage = lowerMessage;
+    for (final phrase in [
+      "i'll take",
+      "ill take",
+      "i can do",
+      "i will do",
+      "i'll do",
+      "ill do",
+    ]) {
+      cleanedMessage = cleanedMessage.replaceAll(phrase, '').trim();
+    }
+
+    // Try to match against task titles
+    Map<String, dynamic>? bestMatch;
+    int bestMatchScore = 0;
+
+    for (final task in tasks) {
+      final taskTitle = (task['taskTitle']?.toString() ?? '').toLowerCase();
+      final taskDescription = (task['taskDescription']?.toString() ?? '')
+          .toLowerCase();
+
+      // Calculate match score
+      int score = 0;
+
+      // Check if message contains significant words from the task title
+      final taskWords = taskTitle
+          .split(' ')
+          .where((w) => w.length > 3)
+          .toList();
+      for (final word in taskWords) {
+        if (cleanedMessage.contains(word)) {
+          score += 2; // Title matches are weighted higher
+        }
+      }
+
+      // Check description too
+      final descWords = taskDescription
+          .split(' ')
+          .where((w) => w.length > 3)
+          .toList();
+      for (final word in descWords) {
+        if (cleanedMessage.contains(word)) {
+          score += 1;
+        }
+      }
+
+      if (score > bestMatchScore) {
+        bestMatchScore = score;
+        bestMatch = task;
+      }
+    }
+
+    // Only return a match if the score is high enough (at least 2 matching words)
+    if (bestMatchScore >= 2) {
+      return bestMatch;
+    }
+
+    return null;
+  }
+
+  /// Asks the user to clarify which task they want to volunteer for
+  Future<void> _askForTaskClarification(
+    List<Map<String, dynamic>> tasks,
+    String userId,
+    String userName,
+    String houseId,
+  ) async {
+    // Store the clarification state
+    setState(() {
+      _pendingClarificationUserId = userId;
+      _pendingClarificationUserName = userName;
+      _pendingClarificationTasks = tasks;
+    });
+
+    // Build the clarification message
+    final taskList = tasks
+        .asMap()
+        .entries
+        .map((entry) {
+          final index = entry.key + 1;
+          final task = entry.value;
+          final title = task['taskTitle']?.toString() ?? 'Unknown task';
+          return '$index. **$title**';
+        })
+        .join('\n');
+
+    final message =
+        'Hey **$userName**, I see you want to help! '
+        'There are ${tasks.length} unassigned tasks right now:\n\n'
+        '$taskList\n\n'
+        'Which one would you like to take? Just reply with the task name or number.';
+
+    await _firestoreService.sendBeemoMessage(
+      houseId: houseId,
+      message: message,
+    );
+
+    // Clear clarification after 5 minutes
+    Future.delayed(const Duration(minutes: 5), () {
+      if (mounted && _pendingClarificationUserId == userId) {
+        setState(() {
+          _pendingClarificationUserId = null;
+          _pendingClarificationUserName = null;
+          _pendingClarificationTasks = null;
+        });
+      }
+    });
+  }
+
+  /// Handles the user's response to a clarification request
+  Future<bool> _handleClarificationResponse(
+    String message,
+    String userId,
+    String userName,
+    String houseId,
+  ) async {
+    final tasks = _pendingClarificationTasks;
+    if (tasks == null || tasks.isEmpty) {
+      return false;
+    }
+
+    final lowerMessage = message.toLowerCase().trim();
+    Map<String, dynamic>? selectedTask;
+
+    // Try to parse as a number first (e.g., "1", "2", etc.)
+    final numberMatch = RegExp(r'^\d+$').firstMatch(lowerMessage);
+    if (numberMatch != null) {
+      final taskNumber = int.tryParse(lowerMessage);
+      if (taskNumber != null && taskNumber > 0 && taskNumber <= tasks.length) {
+        selectedTask = tasks[taskNumber - 1];
+      }
+    }
+
+    // If not a number, try to match by task title
+    if (selectedTask == null) {
+      for (final task in tasks) {
+        final taskTitle = (task['taskTitle']?.toString() ?? '').toLowerCase();
+        final taskDescription = (task['taskDescription']?.toString() ?? '')
+            .toLowerCase();
+
+        // Check if message contains key words from the task
+        final taskWords = taskTitle
+            .split(' ')
+            .where((w) => w.length > 3)
+            .toList();
+        bool matches = taskWords.any((word) => lowerMessage.contains(word));
+
+        if (!matches) {
+          final descWords = taskDescription
+              .split(' ')
+              .where((w) => w.length > 3)
+              .toList();
+          matches = descWords.any((word) => lowerMessage.contains(word));
+        }
+
+        if (matches) {
+          selectedTask = task;
+          break;
+        }
+      }
+    }
+
+    // Clear the pending clarification
+    setState(() {
+      _pendingClarificationUserId = null;
+      _pendingClarificationUserName = null;
+      _pendingClarificationTasks = null;
+    });
+
+    if (selectedTask != null) {
+      // Assign the task
+      print('✅ User selected task: ${selectedTask['taskTitle']}');
+      await _firestoreService.finalizeAssignmentFromVolunteer(
+        houseId: houseId,
+        sessionData: selectedTask,
+        volunteerId: userId,
+        volunteerName: userName,
+      );
+      return true;
+    } else {
+      // Could not determine which task they meant
+      await _firestoreService.sendBeemoMessage(
+        houseId: houseId,
+        message:
+            "I'm not sure which task you mean, **$userName**. Can you try again? "
+            "Reply with the task number (like '1' or '2') or the full task name.",
+      );
+
+      // Re-ask for clarification
+      await _askForTaskClarification(tasks, userId, userName, houseId);
+      return true;
     }
   }
 }
-
-
-
-
-
-
-
-
-

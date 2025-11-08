@@ -5,6 +5,7 @@ import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/activity_model.dart';
+import '../widgets/beemo_logo.dart';
 
 class RecentActivityScreen extends StatefulWidget {
   const RecentActivityScreen({super.key});
@@ -75,14 +76,16 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
 
         // Not confirmed yet - check if current user can confirm
         final completedBy = activity.metadata['completedBy']?.toString();
-        final isMyTask = currentUserId != null &&
-                        completedBy != null &&
-                        completedBy.isNotEmpty &&
-                        completedBy == currentUserId;
-        final canConfirm = currentUserId != null &&
-                          completedBy != null &&
-                          completedBy.isNotEmpty &&
-                          completedBy != currentUserId;
+        final isMyTask =
+            currentUserId != null &&
+            completedBy != null &&
+            completedBy.isNotEmpty &&
+            completedBy == currentUserId;
+        final canConfirm =
+            currentUserId != null &&
+            completedBy != null &&
+            completedBy.isNotEmpty &&
+            completedBy != currentUserId;
 
         String buttonText;
         Color buttonColor;
@@ -115,9 +118,10 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
         );
       case 'task_created':
         // Task assignment - show Beemo icon if assigned by AI, otherwise show assignment icon
-        final isAIAssignment = activity.title.contains('(AI)') ||
-                                activity.description.contains('Beemo') ||
-                                activity.createdBy == 'ai_agent';
+        final isAIAssignment =
+            activity.title.contains('(AI)') ||
+            activity.description.contains('Beemo') ||
+            activity.createdBy == 'ai_agent';
         if (isAIAssignment) {
           // Beemo icon for AI assignments
           return Container(
@@ -128,12 +132,16 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
               shape: BoxShape.circle,
               border: Border.all(color: Colors.black, width: 2),
             ),
-            child: const Center(
-              child: Text(
-                '🤖',
-                style: TextStyle(fontSize: 20),
-              ),
-            ),
+           child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Center(child: BeemoLogo(size: 36)),
+      ),),
+      ),),
+      ),
           );
         } else {
           // Regular assignment icon
@@ -165,10 +173,7 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
             border: Border.all(color: Colors.black, width: 2),
           ),
           child: const Center(
-            child: Text(
-              '💬',
-              style: TextStyle(fontSize: 20),
-            ),
+            child: Text('💬', style: TextStyle(fontSize: 20)),
           ),
         );
       default:
@@ -231,17 +236,17 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
                     const Center(
                       child: Text(
                         'Please create or join a house first',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.black54,
-                        ),
+                        style: TextStyle(fontSize: 16, color: Colors.black54),
                       ),
                     )
                   else
                     StreamBuilder<List<Activity>>(
-                      stream: _firestoreService.getActivitiesStream(houseProvider.currentHouseId!),
+                      stream: _firestoreService.getActivitiesStream(
+                        houseProvider.currentHouseId!,
+                      ),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return const Center(
                             child: CircularProgressIndicator(
                               color: Color(0xFFFFC400),
@@ -264,7 +269,9 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
                         // Group activities by date
                         Map<String, List<Activity>> groupedActivities = {};
                         for (var activity in snapshot.data!) {
-                          String dateHeader = _formatDateHeader(activity.createdAt);
+                          String dateHeader = _formatDateHeader(
+                            activity.createdAt,
+                          );
                           if (!groupedActivities.containsKey(dateHeader)) {
                             groupedActivities[dateHeader] = [];
                           }
@@ -294,7 +301,10 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
                                     padding: const EdgeInsets.only(bottom: 12),
                                     child: _ActivityCard(
                                       activity: activity,
-                                      badge: _getActivityBadge(activity, currentUserId),
+                                      badge: _getActivityBadge(
+                                        activity,
+                                        currentUserId,
+                                      ),
                                       currentUserId: currentUserId,
                                       firestoreService: _firestoreService,
                                     ),
@@ -318,34 +328,42 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
               left: 0,
               right: 0,
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF16213E),
-                    borderRadius: BorderRadius.circular(34),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).popUntil((route) => route.isFirst);
-                        },
-                        child: _buildNavIcon(Icons.view_in_ar_rounded, false),
-                      ),
-                      const SizedBox(width: 28),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).popUntil((route) => route.isFirst);
-                        },
-                        child: _buildBeemoNavIcon(false),
-                      ),
-                      const SizedBox(width: 28),
-                      _buildNavIcon(Icons.history, true),
-                    ],
+                child: SizedBox(
+                  height: 78,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16213E),
+                      borderRadius: BorderRadius.circular(34),
+                    ),
+                    clipBehavior: Clip.none,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(
+                              context,
+                            ).popUntil((route) => route.isFirst);
+                          },
+                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(
+                              context,
+                            ).popUntil((route) => route.isFirst);
+                          },
+                          child: _buildBeemoNavIcon(false),
+                        ),
+                        const SizedBox(width: 12),
+                        _buildNavIcon(Icons.history, true),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -358,38 +376,47 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
 
   Widget _buildNavIcon(IconData icon, bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 90,
+      height: 90,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
       child: Icon(
         icon,
         color: isActive ? Colors.white : Colors.white60,
-        size: 26,
+        size: 36,
       ),
     );
   }
 
   Widget _buildBeemoNavIcon(bool isActive) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 120,
+      height: 120,
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D8D) : Colors.transparent,
+        color: isActive ? const Color(0xFFFF1B8D) : Colors.transparent,
         shape: BoxShape.circle,
-        border: isActive ? Border.all(color: Colors.black, width: 2.5) : null,
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
-      child: Center(
-        child: Text(
-          '🤖',
-          style: TextStyle(
-            fontSize: isActive ? 24 : 20,
-          ),
-        ),
-      ),
+      child: Center(child: BeemoLogo(size: 36)),
     );
   }
 }
@@ -424,9 +451,9 @@ class _ActivityCardState extends State<_ActivityCard> {
     final completedBy = widget.activity.metadata['completedBy']?.toString();
 
     if (taskId == null || taskId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task ID not found')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task ID not found')));
       return;
     }
 

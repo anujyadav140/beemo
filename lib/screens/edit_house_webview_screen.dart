@@ -298,7 +298,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     }
   }
 
-  Widget _buildCategoryIconButton(String emoji, Color color) {
+  Widget _buildCategoryIconButton(String emoji, Color color, {required bool isTop}) {
     return GestureDetector(
       onTap: () {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -314,7 +314,12 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
         height: 45,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: isTop
+              ? const BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  topRight: Radius.circular(10),
+                )
+              : BorderRadius.zero,
           border: Border.all(color: Colors.black, width: 2.5),
         ),
         child: Center(
@@ -565,36 +570,34 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
 
             const SizedBox(height: 10),
 
-            // Furniture Slider Container
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
-                border: Border.all(color: Colors.black, width: 3),
-              ),
-              child: Column(
-                children: [
-                  // Category Icon Buttons (work in progress)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12, bottom: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildCategoryIconButton('🛋️', const Color(0xFFFFC400)),
-                        const SizedBox(width: 6),
-                        _buildCategoryIconButton('🌿', const Color(0xFF00D9A3)),
-                        const SizedBox(width: 6),
-                        _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D)),
-                      ],
-                    ),
+            // Category Buttons and Furniture Slider
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Category Icon Buttons on the left (stacked vertically, stuck together)
+                Padding(
+                  padding: const EdgeInsets.only(left: 0),
+                  child: Column(
+                    children: [
+                      _buildCategoryIconButton('🛋️', const Color(0xFFFFC400), isTop: true),
+                      _buildCategoryIconButton('🌿', const Color(0xFF00D9A3), isTop: false),
+                      _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D), isTop: false),
+                    ],
                   ),
+                ),
 
-                  // Furniture Items Slider
-                  SizedBox(
+                // Furniture Items Slider (only container around PNG objects)
+                Expanded(
+                  child: Container(
                     height: 140,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(30),
+                        topRight: Radius.circular(30),
+                      ),
+                      border: Border.all(color: Colors.black, width: 3),
+                    ),
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -665,8 +668,8 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       },
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
               ],
             ),

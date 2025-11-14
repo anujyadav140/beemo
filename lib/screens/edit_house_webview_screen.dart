@@ -298,7 +298,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     }
   }
 
-  Widget _buildCategoryIconButton(String emoji, Color color, {required bool isLeft, bool isRight = false}) {
+  Widget _buildCategoryIconButton(String emoji, Color color, {required bool isLeft, bool isRight = false, bool isMiddle = false}) {
     return GestureDetector(
       onTap: () {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -323,7 +323,12 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       topRight: Radius.circular(12),
                     )
                   : BorderRadius.zero,
-          border: Border.all(color: Colors.black, width: 3),
+          border: Border(
+            top: const BorderSide(color: Colors.black, width: 2),
+            bottom: const BorderSide(color: Colors.black, width: 2),
+            left: isLeft ? const BorderSide(color: Colors.black, width: 2) : BorderSide.none,
+            right: isRight ? const BorderSide(color: Colors.black, width: 2) : BorderSide.none,
+          ),
         ),
         child: Center(
           child: Text(
@@ -582,7 +587,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     _buildCategoryIconButton('🛋️', const Color(0xFFFFC400), isLeft: true),
-                    _buildCategoryIconButton('🌿', const Color(0xFF00D9A3), isLeft: false),
+                    _buildCategoryIconButton('🌿', const Color(0xFF00D9A3), isLeft: false, isMiddle: true),
                     _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D), isLeft: false, isRight: true),
                   ],
                 ),
@@ -601,10 +606,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       bottomRight: Radius.circular(30),
                     ),
                     border: Border(
-                      left: BorderSide(color: Colors.black, width: 3),
-                      right: BorderSide(color: Colors.black, width: 3),
-                      bottom: BorderSide(color: Colors.black, width: 3),
-                      top: BorderSide(color: Colors.black, width: 3),
+                      top: BorderSide(color: Colors.black, width: 2),
                     ),
                   ),
                   child: ListView.builder(

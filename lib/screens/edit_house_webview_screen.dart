@@ -480,77 +480,80 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
             ),
 
             // Room Selector
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('🚧 Work in Progress - Multiple rooms coming soon!'),
-                          duration: Duration(seconds: 2),
-                          backgroundColor: Color(0xFFFF4D8D),
+            Opacity(
+              opacity: 0.4,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('🚧 Work in Progress - Multiple rooms coming soon!'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Color(0xFFFF4D8D),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 2.5),
                         ),
-                      );
-                    },
-                    child: Container(
-                      width: 48,
-                      height: 48,
+                        child: const Icon(Icons.chevron_left, size: 28, color: Colors.black),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 60,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
+                        color: const Color(0xFFFF4D8D),
+                        borderRadius: BorderRadius.circular(24),
                         border: Border.all(color: Colors.black, width: 2.5),
                       ),
-                      child: const Icon(Icons.chevron_left, size: 28, color: Colors.black),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 60,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF4D8D),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.black, width: 2.5),
-                    ),
-                    child: Text(
-                      currentRoom['name'],
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        fontStyle: FontStyle.italic,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  GestureDetector(
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('🚧 Work in Progress - Multiple rooms coming soon!'),
-                          duration: Duration(seconds: 2),
-                          backgroundColor: Color(0xFFFF4D8D),
+                      child: Text(
+                        currentRoom['name'],
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          fontStyle: FontStyle.italic,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
                         ),
-                      );
-                    },
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.black, width: 2.5),
                       ),
-                      child: const Icon(Icons.chevron_right, size: 28, color: Colors.black),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 16),
+                    GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('🚧 Work in Progress - Multiple rooms coming soon!'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Color(0xFFFF4D8D),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 2.5),
+                        ),
+                        child: const Icon(Icons.chevron_right, size: 28, color: Colors.black),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -582,13 +585,16 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Category Icon Buttons on top left (horizontal, stuck together)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    _buildCategoryIconButton('🛋️', const Color(0xFFFFC400), isLeft: true),
-                    _buildCategoryIconButton('🌿', const Color(0xFF00D9A3), isLeft: false, isMiddle: true),
-                    _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D), isLeft: false, isRight: true),
-                  ],
+                Opacity(
+                  opacity: 0.5,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      _buildCategoryIconButton('🛋️', const Color(0xFFFFC400), isLeft: true),
+                      _buildCategoryIconButton('🌿', const Color(0xFF00D9A3), isLeft: false, isMiddle: true),
+                      _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D), isLeft: false, isRight: true),
+                    ],
+                  ),
                 ),
 
                 // Furniture Items Slider (only container around PNG objects)

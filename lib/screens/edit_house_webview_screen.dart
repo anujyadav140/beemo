@@ -298,7 +298,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     }
   }
 
-  Widget _buildCategoryIconButton(String emoji, Color color, {required bool isLeft}) {
+  Widget _buildCategoryIconButton(String emoji, Color color, {required bool isLeft, bool isRight = false}) {
     return GestureDetector(
       onTap: () {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -318,7 +318,12 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
               ? const BorderRadius.only(
                   topLeft: Radius.circular(12),
                 )
-              : BorderRadius.zero,
+              : isRight
+                  ? const BorderRadius.only(
+                      topRight: Radius.circular(12),
+                    )
+                  : BorderRadius.zero,
+          border: Border.all(color: Colors.black, width: 3),
         ),
         child: Center(
           child: Text(
@@ -578,13 +583,15 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                   children: [
                     _buildCategoryIconButton('🛋️', const Color(0xFFFFC400), isLeft: true),
                     _buildCategoryIconButton('🌿', const Color(0xFF00D9A3), isLeft: false),
-                    _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D), isLeft: false),
+                    _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D), isLeft: false, isRight: true),
                   ],
                 ),
 
                 // Furniture Items Slider (only container around PNG objects)
                 Container(
                   height: 160,
+                  margin: const EdgeInsets.only(right: 0),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.only(
@@ -593,10 +600,16 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       bottomLeft: Radius.circular(30),
                       bottomRight: Radius.circular(30),
                     ),
+                    border: Border(
+                      left: BorderSide(color: Colors.black, width: 3),
+                      right: BorderSide(color: Colors.black, width: 3),
+                      bottom: BorderSide(color: Colors.black, width: 3),
+                      top: BorderSide(color: Colors.black, width: 3),
+                    ),
                   ),
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     itemCount: _allFurnitureItems.length,
                     itemBuilder: (context, index) {
                       final item = _allFurnitureItems[index];

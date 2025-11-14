@@ -298,7 +298,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     }
   }
 
-  Widget _buildCategoryIcon(String emoji, String label) {
+  Widget _buildCategoryIconButton(String emoji, Color color) {
     return GestureDetector(
       onTap: () {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -310,28 +310,18 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
         );
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        width: 60,
+        height: 60,
         decoration: BoxDecoration(
-          color: Colors.grey[300],
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey[400]!, width: 2),
+          color: color,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.black, width: 2.5),
         ),
-        child: Row(
-          children: [
-            Text(
-              emoji,
-              style: TextStyle(fontSize: 20, color: Colors.grey[600]),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
+        child: Center(
+          child: Text(
+            emoji,
+            style: const TextStyle(fontSize: 28),
+          ),
         ),
       ),
     );
@@ -477,7 +467,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
               ),
             ),
 
-            // Room Selector (greyed out - work in progress)
+            // Room Selector
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Row(
@@ -497,11 +487,11 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
+                        color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.grey[400]!, width: 2.5),
+                        border: Border.all(color: Colors.black, width: 2.5),
                       ),
-                      child: Icon(Icons.chevron_left, size: 28, color: Colors.grey[500]),
+                      child: const Icon(Icons.chevron_left, size: 28, color: Colors.black),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -511,9 +501,9 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.grey[400],
+                      color: const Color(0xFFFF4D8D),
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.grey[500]!, width: 2.5),
+                      border: Border.all(color: Colors.black, width: 2.5),
                     ),
                     child: Text(
                       currentRoom['name'],
@@ -541,11 +531,11 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
+                        color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.grey[400]!, width: 2.5),
+                        border: Border.all(color: Colors.black, width: 2.5),
                       ),
-                      child: Icon(Icons.chevron_right, size: 28, color: Colors.grey[500]),
+                      child: const Icon(Icons.chevron_right, size: 28, color: Colors.black),
                     ),
                   ),
                 ],
@@ -575,28 +565,26 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
 
             const SizedBox(height: 20),
 
-            // Category Icon Buttons (greyed out - work in progress)
+            // Category Icon Buttons (work in progress)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildCategoryIcon('🛋️', 'Furniture'),
+                  _buildCategoryIconButton('🛋️', const Color(0xFFFFC400)),
                   const SizedBox(width: 12),
-                  _buildCategoryIcon('🎨', 'Decor'),
+                  _buildCategoryIconButton('🌿', const Color(0xFF00D9A3)),
                   const SizedBox(width: 12),
-                  _buildCategoryIcon('🌿', 'Plants'),
-                  const SizedBox(width: 12),
-                  _buildCategoryIcon('💡', 'Lighting'),
+                  _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D)),
                 ],
               ),
             ),
 
             const SizedBox(height: 12),
 
-            // Furniture Slider
+            // Furniture Slider with Add Button
             Container(
-              height: 140,
+              height: 160,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: const BorderRadius.only(
@@ -605,74 +593,110 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                 ),
                 border: Border.all(color: Colors.black, width: 3),
               ),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                itemCount: _allFurnitureItems.length,
-                itemBuilder: (context, index) {
-                  final item = _allFurnitureItems[index];
-                  final isSelected = _selectedItemId == item.id;
+              child: Row(
+                children: [
+                  // Furniture Items Slider
+                  Expanded(
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      itemCount: _allFurnitureItems.length,
+                      itemBuilder: (context, index) {
+                        final item = _allFurnitureItems[index];
+                        final isSelected = _selectedItemId == item.id;
 
-                  return GestureDetector(
-                    onTap: () {
-                      _selectFurnitureItem(item.id);
-                    },
-                    child: Container(
-                      width: 100,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? const Color(0xFFFF4D8D)
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isSelected ? const Color(0xFFFF4D8D) : Colors.black,
-                          width: isSelected ? 3 : 2,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: item.imageUrl != null && item.imageUrl!.startsWith("assets/")
-                                ? Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Image.asset(
-                                      item.imageUrl!,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Center(
-                                          child: Text(
-                                            item.emoji,
-                                            style: const TextStyle(fontSize: 32),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  )
-                                : Center(
-                                    child: Text(
-                                      item.emoji,
-                                      style: const TextStyle(fontSize: 32),
-                                    ),
-                                  ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Text(
-                              item.name,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isSelected ? Colors.white : Colors.black87,
+                        return GestureDetector(
+                          onTap: () {
+                            _selectFurnitureItem(item.id);
+                          },
+                          child: Container(
+                            width: 110,
+                            margin: const EdgeInsets.only(right: 12),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFFFF4D8D)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFFFF4D8D) : Colors.black,
+                                width: isSelected ? 3 : 2.5,
                               ),
                             ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: item.imageUrl != null && item.imageUrl!.startsWith("assets/")
+                                      ? Padding(
+                                          padding: const EdgeInsets.all(12.0),
+                                          child: Image.asset(
+                                            item.imageUrl!,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return Center(
+                                                child: Text(
+                                                  item.emoji,
+                                                  style: const TextStyle(fontSize: 36),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        )
+                                      : Center(
+                                          child: Text(
+                                            item.emoji,
+                                            style: const TextStyle(fontSize: 36),
+                                          ),
+                                        ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12.0),
+                                  child: Text(
+                                    item.name,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: isSelected ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
+                        );
+                      },
+                    ),
+                  ),
+                  // Add Button
+                  Padding(
+                    padding: const EdgeInsets.only(right: 20, left: 8),
+                    child: GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('🚧 Work in Progress - Shop coming soon!'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Color(0xFFFF4D8D),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFC400),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 3),
+                        ),
+                        child: const Icon(
+                          Icons.add,
+                          size: 40,
+                          color: Colors.black,
+                        ),
                       ),
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
             ),
               ],

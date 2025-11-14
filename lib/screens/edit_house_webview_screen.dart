@@ -298,6 +298,45 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     }
   }
 
+  Widget _buildCategoryIcon(String emoji, String label) {
+    return GestureDetector(
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🚧 Work in Progress - More categories coming soon!'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Color(0xFFFF4D8D),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey[400]!, width: 2),
+        ),
+        child: Row(
+          children: [
+            Text(
+              emoji,
+              style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final houseProvider = Provider.of<HouseProvider>(context);
@@ -438,7 +477,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
               ),
             ),
 
-            // Room Selector
+            // Room Selector (greyed out - work in progress)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Row(
@@ -446,22 +485,23 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                 children: [
                   GestureDetector(
                     onTap: () {
-                      if (_currentRoomIndex > 0) {
-                        setState(() {
-                          _currentRoomIndex--;
-                        });
-                        _loadCurrentRoomState();
-                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🚧 Work in Progress - Multiple rooms coming soon!'),
+                          duration: Duration(seconds: 2),
+                          backgroundColor: Color(0xFFFF4D8D),
+                        ),
+                      );
                     },
                     child: Container(
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.grey[300],
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.black, width: 2.5),
+                        border: Border.all(color: Colors.grey[400]!, width: 2.5),
                       ),
-                      child: const Icon(Icons.chevron_left, size: 28),
+                      child: Icon(Icons.chevron_left, size: 28, color: Colors.grey[500]),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -471,9 +511,9 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFF4D8D),
+                      color: Colors.grey[400],
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.black, width: 2.5),
+                      border: Border.all(color: Colors.grey[500]!, width: 2.5),
                     ),
                     child: Text(
                       currentRoom['name'],
@@ -489,22 +529,23 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                   const SizedBox(width: 16),
                   GestureDetector(
                     onTap: () {
-                      if (_currentRoomIndex < _rooms.length - 1) {
-                        setState(() {
-                          _currentRoomIndex++;
-                        });
-                        _loadCurrentRoomState();
-                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🚧 Work in Progress - Multiple rooms coming soon!'),
+                          duration: Duration(seconds: 2),
+                          backgroundColor: Color(0xFFFF4D8D),
+                        ),
+                      );
                     },
                     child: Container(
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.grey[300],
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.black, width: 2.5),
+                        border: Border.all(color: Colors.grey[400]!, width: 2.5),
                       ),
-                      child: const Icon(Icons.chevron_right, size: 28),
+                      child: Icon(Icons.chevron_right, size: 28, color: Colors.grey[500]),
                     ),
                   ),
                 ],
@@ -533,6 +574,25 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
             ),
 
             const SizedBox(height: 20),
+
+            // Category Icon Buttons (greyed out - work in progress)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildCategoryIcon('🛋️', 'Furniture'),
+                  const SizedBox(width: 12),
+                  _buildCategoryIcon('🎨', 'Decor'),
+                  const SizedBox(width: 12),
+                  _buildCategoryIcon('🌿', 'Plants'),
+                  const SizedBox(width: 12),
+                  _buildCategoryIcon('💡', 'Lighting'),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
 
             // Furniture Slider
             Container(

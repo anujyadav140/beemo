@@ -298,7 +298,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     }
   }
 
-  Widget _buildCategoryIconButton(String emoji, Color color, {required bool isTop}) {
+  Widget _buildCategoryIconButton(String emoji, Color color, {required bool isLeft}) {
     return GestureDetector(
       onTap: () {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -314,10 +314,9 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
         height: 45,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: isTop
+          borderRadius: isLeft
               ? const BorderRadius.only(
                   topLeft: Radius.circular(10),
-                  topRight: Radius.circular(10),
                 )
               : BorderRadius.zero,
           border: Border.all(color: Colors.black, width: 2.5),
@@ -571,102 +570,100 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
             const SizedBox(height: 10),
 
             // Category Buttons and Furniture Slider
-            Row(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Category Icon Buttons on the left (stacked vertically, stuck together)
-                Padding(
-                  padding: const EdgeInsets.only(left: 0),
-                  child: Column(
-                    children: [
-                      _buildCategoryIconButton('🛋️', const Color(0xFFFFC400), isTop: true),
-                      _buildCategoryIconButton('🌿', const Color(0xFF00D9A3), isTop: false),
-                      _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D), isTop: false),
-                    ],
-                  ),
+                // Category Icon Buttons on top left (horizontal, stuck together)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    _buildCategoryIconButton('🛋️', const Color(0xFFFFC400), isLeft: true),
+                    _buildCategoryIconButton('🌿', const Color(0xFF00D9A3), isLeft: false),
+                    _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D), isLeft: false),
+                  ],
                 ),
 
                 // Furniture Items Slider (only container around PNG objects)
-                Expanded(
-                  child: Container(
-                    height: 140,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(30),
-                        topRight: Radius.circular(30),
-                      ),
-                      border: Border.all(color: Colors.black, width: 3),
+                Container(
+                  height: 140,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(0),
+                      topRight: Radius.circular(30),
+                      bottomLeft: Radius.circular(30),
+                      bottomRight: Radius.circular(30),
                     ),
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      itemCount: _allFurnitureItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _allFurnitureItems[index];
-                        final isSelected = _selectedItemId == item.id;
+                    border: Border.all(color: Colors.black, width: 3),
+                  ),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _allFurnitureItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _allFurnitureItems[index];
+                      final isSelected = _selectedItemId == item.id;
 
-                        return GestureDetector(
-                          onTap: () {
-                            _selectFurnitureItem(item.id);
-                          },
-                          child: Container(
-                            width: 110,
-                            margin: const EdgeInsets.only(right: 12),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? const Color(0xFFFF4D8D)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isSelected ? const Color(0xFFFF4D8D) : Colors.black,
-                                width: isSelected ? 3 : 2.5,
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Expanded(
-                                  child: item.imageUrl != null && item.imageUrl!.startsWith("assets/")
-                                      ? Padding(
-                                          padding: const EdgeInsets.all(12.0),
-                                          child: Image.asset(
-                                            item.imageUrl!,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return Center(
-                                                child: Text(
-                                                  item.emoji,
-                                                  style: const TextStyle(fontSize: 36),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        )
-                                      : Center(
-                                          child: Text(
-                                            item.emoji,
-                                            style: const TextStyle(fontSize: 36),
-                                          ),
-                                        ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 12.0),
-                                  child: Text(
-                                    item.name,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: isSelected ? Colors.white : Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                      return GestureDetector(
+                        onTap: () {
+                          _selectFurnitureItem(item.id);
+                        },
+                        child: Container(
+                          width: 110,
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? const Color(0xFFFF4D8D)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFFFF4D8D) : Colors.black,
+                              width: isSelected ? 3 : 2.5,
                             ),
                           ),
-                        );
-                      },
-                    ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: item.imageUrl != null && item.imageUrl!.startsWith("assets/")
+                                    ? Padding(
+                                        padding: const EdgeInsets.all(12.0),
+                                        child: Image.asset(
+                                          item.imageUrl!,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return Center(
+                                              child: Text(
+                                                item.emoji,
+                                                style: const TextStyle(fontSize: 36),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      )
+                                    : Center(
+                                        child: Text(
+                                          item.emoji,
+                                          style: const TextStyle(fontSize: 36),
+                                        ),
+                                      ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12.0),
+                                child: Text(
+                                  item.name,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected ? Colors.white : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],

@@ -17,6 +17,7 @@ import 'chat_screen.dart';
 import 'next_meeting_screen.dart';
 import 'setup_house_screen.dart';
 import 'virtual_house_screen.dart';
+import 'edit_house_webview_screen.dart';
 import 'recent_activity_screen.dart';
 import 'account_settings_screen.dart';
 import 'meeting_screen.dart';
@@ -1104,7 +1105,7 @@ class _DashScreenState extends State<DashScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const VirtualHouseScreen(),
+                                builder: (context) => const EditHouseWebViewScreen(),
                               ),
                             );
                           },

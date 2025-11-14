@@ -8,7 +8,6 @@ import '../providers/house_provider.dart';
 import '../models/house_model.dart';
 import 'manage_members_screen.dart';
 import 'edit_profile_screen.dart';
-import 'edit_house_profile_screen.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
   const AccountSettingsScreen({super.key});
@@ -139,20 +138,6 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                                 trailing: houseName,
                                 onTap: () {
                                   _showEditHouseNameDialog(context, houseName, houseId);
-                                },
-                              ),
-                              const Divider(height: 1, color: Colors.black26),
-                              _buildSettingItem(
-                                icon: Icons.camera_alt,
-                                iconColor: const Color(0xFFE91E63),
-                                title: 'House profile picture',
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const EditHouseProfileScreen(),
-                                    ),
-                                  );
                                 },
                               ),
                               const Divider(height: 1, color: Colors.black26),

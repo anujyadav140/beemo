@@ -6,6 +6,7 @@ import '../providers/house_provider.dart';
 import '../widgets/beemo_logo.dart';
 import '../models/furniture_item.dart';
 import 'agenda_screen.dart';
+import 'edit_house_webview_screen.dart';
 
 class VirtualHouseScreen extends StatefulWidget {
   const VirtualHouseScreen({super.key});
@@ -554,7 +555,12 @@ class _VirtualHouseScreenState extends State<VirtualHouseScreen> {
                       children: [
                         GestureDetector(
                           onTap: () {
-                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const EditHouseWebViewScreen(),
+                              ),
+                            );
                           },
                           child: _buildNavIcon(Icons.view_in_ar_rounded, true),
                         ),

@@ -2754,6 +2754,110 @@ class FirestoreService {
       print('DEBUG: Failed to assign $sourceType to $senderName');
     }
   }
+
+  // ==================== Room Furniture State Management ====================
+
+  /// Save the complete furniture state for a specific room
+  Future<void> saveRoomFurnitureState({
+    required String houseId,
+    required String roomName,
+    required List<Map<String, dynamic>> furnitureItems,
+  }) async {
+    try {
+      await _retryOperation(() async {
+        await _firestore
+            .collection('houses')
+            .doc(houseId)
+            .collection('rooms')
+            .doc(roomName)
+            .set({
+          'furniture_items': furnitureItems,
+          'last_modified': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+      print('✅ Saved furniture state for room: $roomName');
+    } catch (e) {
+      print('❌ Failed to save furniture state for room $roomName: $e');
+      rethrow;
+    }
+  }
+
+  /// Load the furniture state for a specific room
+  Future<List<Map<String, dynamic>>> loadRoomFurnitureState({
+    required String houseId,
+    required String roomName,
+  }) async {
+    try {
+      final snapshot = await _retryOperation(() async {
+        return await _firestore
+            .collection('houses')
+            .doc(houseId)
+            .collection('rooms')
+            .doc(roomName)
+            .get();
+      });
+
+      if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
+        final items = data['furniture_items'] as List<dynamic>?;
+        if (items != null) {
+          return items.map((item) => item as Map<String, dynamic>).toList();
+        }
+      }
+      print('📭 No furniture state found for room: $roomName');
+      return [];
+    } catch (e) {
+      print('❌ Failed to load furniture state for room $roomName: $e');
+      return [];
+    }
+  }
+
+  /// Stream of furniture state changes for a specific room
+  Stream<List<Map<String, dynamic>>> getRoomFurnitureStateStream({
+    required String houseId,
+    required String roomName,
+  }) {
+    return _firestore
+        .collection('houses')
+        .doc(houseId)
+        .collection('rooms')
+        .doc(roomName)
+        .snapshots()
+        .map((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
+        final items = data['furniture_items'] as List<dynamic>?;
+        if (items != null) {
+          return items.map((item) => item as Map<String, dynamic>).toList();
+        }
+      }
+      return <Map<String, dynamic>>[];
+    });
+  }
+
+  /// Clear all furniture from a specific room
+  Future<void> clearRoomFurniture({
+    required String houseId,
+    required String roomName,
+  }) async {
+    try {
+      await _retryOperation(() async {
+        await _firestore
+            .collection('houses')
+            .doc(houseId)
+            .collection('rooms')
+            .doc(roomName)
+            .set({
+          'furniture_items': [],
+          'last_modified': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+      print('✅ Cleared furniture for room: $roomName');
+    } catch (e) {
+      print('❌ Failed to clear furniture for room $roomName: $e');
+      rethrow;
+    }
+  }
 }
 
 class _TaskLoad {

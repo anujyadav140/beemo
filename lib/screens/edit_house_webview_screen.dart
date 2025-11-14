@@ -310,17 +310,17 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
         );
       },
       child: Container(
-        width: 60,
-        height: 60,
+        width: 50,
+        height: 50,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black, width: 2.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[600]!, width: 2),
         ),
         child: Center(
           child: Text(
             emoji,
-            style: const TextStyle(fontSize: 28),
+            style: TextStyle(fontSize: 24, color: Colors.grey[700]),
           ),
         ),
       ),
@@ -563,28 +563,10 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
 
-            // Category Icon Buttons (work in progress)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildCategoryIconButton('🛋️', const Color(0xFFFFC400)),
-                  const SizedBox(width: 12),
-                  _buildCategoryIconButton('🌿', const Color(0xFF00D9A3)),
-                  const SizedBox(width: 12),
-                  _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D)),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Furniture Slider with Add Button
+            // Furniture Slider Container
             Container(
-              height: 160,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: const BorderRadius.only(
@@ -593,13 +575,29 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                 ),
                 border: Border.all(color: Colors.black, width: 3),
               ),
-              child: Row(
+              child: Column(
                 children: [
+                  // Category Icon Buttons (greyed out - work in progress)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildCategoryIconButton('🛋️', Colors.grey[400]!),
+                        const SizedBox(width: 8),
+                        _buildCategoryIconButton('🌿', Colors.grey[400]!),
+                        const SizedBox(width: 8),
+                        _buildCategoryIconButton('🎨', Colors.grey[400]!),
+                      ],
+                    ),
+                  ),
+
                   // Furniture Items Slider
-                  Expanded(
+                  SizedBox(
+                    height: 140,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       itemCount: _allFurnitureItems.length,
                       itemBuilder: (context, index) {
                         final item = _allFurnitureItems[index];
@@ -665,35 +663,6 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                           ),
                         );
                       },
-                    ),
-                  ),
-                  // Add Button
-                  Padding(
-                    padding: const EdgeInsets.only(right: 20, left: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('🚧 Work in Progress - Shop coming soon!'),
-                            duration: Duration(seconds: 2),
-                            backgroundColor: Color(0xFFFF4D8D),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 70,
-                        height: 70,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFC400),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.black, width: 3),
-                        ),
-                        child: const Icon(
-                          Icons.add,
-                          size: 40,
-                          color: Colors.black,
-                        ),
-                      ),
                     ),
                   ),
                 ],

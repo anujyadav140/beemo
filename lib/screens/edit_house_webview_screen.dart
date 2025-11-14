@@ -310,21 +310,20 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
         );
       },
       child: Container(
-        width: 45,
-        height: 45,
+        width: 50,
+        height: 50,
         decoration: BoxDecoration(
           color: color,
           borderRadius: isLeft
               ? const BorderRadius.only(
-                  topLeft: Radius.circular(10),
+                  topLeft: Radius.circular(12),
                 )
               : BorderRadius.zero,
-          border: Border.all(color: Colors.black, width: 2.5),
         ),
         child: Center(
           child: Text(
             emoji,
-            style: const TextStyle(fontSize: 22),
+            style: const TextStyle(fontSize: 24),
           ),
         ),
       ),
@@ -585,20 +584,19 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
 
                 // Furniture Items Slider (only container around PNG objects)
                 Container(
-                  height: 140,
-                  decoration: BoxDecoration(
+                  height: 160,
+                  decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: const BorderRadius.only(
+                    borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(0),
                       topRight: Radius.circular(30),
                       bottomLeft: Radius.circular(30),
                       bottomRight: Radius.circular(30),
                     ),
-                    border: Border.all(color: Colors.black, width: 3),
                   ),
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     itemCount: _allFurnitureItems.length,
                     itemBuilder: (context, index) {
                       final item = _allFurnitureItems[index];
@@ -609,16 +607,16 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                           _selectFurnitureItem(item.id);
                         },
                         child: Container(
-                          width: 110,
-                          margin: const EdgeInsets.only(right: 12),
+                          width: 115,
+                          margin: const EdgeInsets.only(right: 16),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? const Color(0xFFFF4D8D)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(20),
+                                : Colors.grey[50],
+                            borderRadius: BorderRadius.circular(24),
                             border: Border.all(
                               color: isSelected ? const Color(0xFFFF4D8D) : Colors.black,
-                              width: isSelected ? 3 : 2.5,
+                              width: 3,
                             ),
                           ),
                           child: Column(
@@ -635,7 +633,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                                             return Center(
                                               child: Text(
                                                 item.emoji,
-                                                style: const TextStyle(fontSize: 36),
+                                                style: const TextStyle(fontSize: 40),
                                               ),
                                             );
                                           },
@@ -644,18 +642,18 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                                     : Center(
                                         child: Text(
                                           item.emoji,
-                                          style: const TextStyle(fontSize: 36),
+                                          style: const TextStyle(fontSize: 40),
                                         ),
                                       ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 12.0),
+                                padding: const EdgeInsets.only(bottom: 14.0),
                                 child: Text(
                                   item.name,
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: isSelected ? Colors.white : Colors.black87,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: isSelected ? Colors.white : Colors.black,
                                   ),
                                 ),
                               ),

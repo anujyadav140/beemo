@@ -325,9 +325,8 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                   : BorderRadius.zero,
           border: Border(
             top: const BorderSide(color: Colors.black, width: 2),
-            bottom: const BorderSide(color: Colors.black, width: 2),
             left: isLeft ? const BorderSide(color: Colors.black, width: 2) : BorderSide.none,
-            right: isRight ? const BorderSide(color: Colors.black, width: 2) : BorderSide.none,
+            right: !isMiddle ? const BorderSide(color: Colors.black, width: 2) : BorderSide.none,
           ),
         ),
         child: Center(

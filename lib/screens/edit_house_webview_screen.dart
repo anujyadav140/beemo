@@ -310,17 +310,17 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
         );
       },
       child: Container(
-        width: 50,
-        height: 50,
+        width: 45,
+        height: 45,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[600]!, width: 2),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.black, width: 2.5),
         ),
         child: Center(
           child: Text(
             emoji,
-            style: TextStyle(fontSize: 24, color: Colors.grey[700]),
+            style: const TextStyle(fontSize: 22),
           ),
         ),
       ),
@@ -577,17 +577,17 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
               ),
               child: Column(
                 children: [
-                  // Category Icon Buttons (greyed out - work in progress)
+                  // Category Icon Buttons (work in progress)
                   Padding(
-                    padding: const EdgeInsets.only(top: 16, bottom: 8),
+                    padding: const EdgeInsets.only(top: 12, bottom: 12),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _buildCategoryIconButton('🛋️', Colors.grey[400]!),
-                        const SizedBox(width: 8),
-                        _buildCategoryIconButton('🌿', Colors.grey[400]!),
-                        const SizedBox(width: 8),
-                        _buildCategoryIconButton('🎨', Colors.grey[400]!),
+                        _buildCategoryIconButton('🛋️', const Color(0xFFFFC400)),
+                        const SizedBox(width: 6),
+                        _buildCategoryIconButton('🌿', const Color(0xFF00D9A3)),
+                        const SizedBox(width: 6),
+                        _buildCategoryIconButton('🎨', const Color(0xFFFF4D8D)),
                       ],
                     ),
                   ),

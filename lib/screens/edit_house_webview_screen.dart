@@ -630,7 +630,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
                               color: isSelected ? const Color(0xFFFF4D8D) : Colors.black,
-                              width: 3,
+                              width: 2,
                             ),
                           ),
                           child: Column(

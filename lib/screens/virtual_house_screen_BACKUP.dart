@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../providers/house_provider.dart';
 import '../widgets/beemo_logo.dart';
 import '../models/furniture_item.dart';
@@ -393,7 +394,33 @@ class _VirtualHouseScreenState extends State<VirtualHouseScreen> {
                           onTap: () {
                             Navigator.pop(context);
                           },
-                          child: _buildNavIcon(Icons.view_in_ar_rounded, true),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF1B8D),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black, width: 2.5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.35),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/cube.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -412,7 +439,25 @@ class _VirtualHouseScreenState extends State<VirtualHouseScreen> {
                               ),
                             );
                           },
-                          child: _buildNavIcon(Icons.event_note_rounded, false),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/note.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'meeting_detail_screen.dart';
 import 'agenda_screen.dart';
 import '../widgets/beemo_logo.dart';
@@ -159,7 +160,25 @@ class MeetingNotesScreen extends StatelessWidget {
                               context,
                             ).popUntil((route) => route.isFirst);
                           },
-                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/cube.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -180,7 +199,25 @@ class MeetingNotesScreen extends StatelessWidget {
                               ),
                             );
                           },
-                          child: _buildNavIcon(Icons.event_note_rounded, false),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/note.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),

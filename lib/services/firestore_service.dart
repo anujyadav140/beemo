@@ -146,6 +146,8 @@ class FirestoreService {
           'name': userName,
           'role': 'admin',
           'joinedAt': FieldValue.serverTimestamp(),
+          'coins': 0,
+          'purchasedItems': [],
         }
       },
       'inviteCode': inviteCode,
@@ -170,6 +172,8 @@ class FirestoreService {
           'name': userName,
           'role': 'member',
           'joinedAt': FieldValue.serverTimestamp(),
+          'coins': 0,
+          'purchasedItems': [],
         }
       });
     } else {
@@ -183,6 +187,161 @@ class FirestoreService {
         .doc(houseId)
         .snapshots()
         .map((doc) => doc.exists ? House.fromFirestore(doc) : null);
+  }
+
+  // ============ COIN MANAGEMENT METHODS ============
+
+  /// Award coins to a user in a house
+  Future<void> awardCoins({
+    required String houseId,
+    required String userId,
+    required int amount,
+  }) async {
+    try {
+      await _firestore.collection('houses').doc(houseId).update({
+        'members.$userId.coins': FieldValue.increment(amount),
+      });
+      print('DEBUG: Awarded $amount coins to user $userId in house $houseId');
+    } catch (e) {
+      print('ERROR: Failed to award coins: $e');
+      rethrow;
+    }
+  }
+
+  /// Get user's coin count in a specific house
+  Future<int> getUserCoins({
+    required String houseId,
+    required String userId,
+  }) async {
+    try {
+      final houseDoc = await _firestore.collection('houses').doc(houseId).get();
+      if (!houseDoc.exists) {
+        return 0;
+      }
+      final data = houseDoc.data() as Map<String, dynamic>?;
+      final members = data?['members'] as Map<String, dynamic>?;
+      final userMember = members?[userId] as Map<String, dynamic>?;
+      return (userMember?['coins'] ?? 0) as int;
+    } catch (e) {
+      print('ERROR: Failed to get user coins: $e');
+      return 0;
+    }
+  }
+
+  /// Stream of user's coins in a specific house
+  Stream<int> getUserCoinsStream({
+    required String houseId,
+    required String userId,
+  }) {
+    return _firestore
+        .collection('houses')
+        .doc(houseId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return 0;
+      final data = doc.data() as Map<String, dynamic>?;
+      final members = data?['members'] as Map<String, dynamic>?;
+      final userMember = members?[userId] as Map<String, dynamic>?;
+      return (userMember?['coins'] ?? 0) as int;
+    });
+  }
+
+  /// Purchase an item (wall color, floor color, etc.)
+  /// Returns true if purchase successful, false if insufficient coins
+  Future<bool> purchaseItem({
+    required String houseId,
+    required String userId,
+    required String itemId,
+    required int cost,
+  }) async {
+    try {
+      // Use transaction to ensure atomic coin deduction and item purchase
+      bool success = false;
+      await _firestore.runTransaction((transaction) async {
+        final houseRef = _firestore.collection('houses').doc(houseId);
+        final houseDoc = await transaction.get(houseRef);
+
+        if (!houseDoc.exists) {
+          return;
+        }
+
+        final data = houseDoc.data() as Map<String, dynamic>?;
+        final members = data?['members'] as Map<String, dynamic>?;
+        final userMember = members?[userId] as Map<String, dynamic>?;
+
+        final currentCoins = (userMember?['coins'] ?? 0) as int;
+        final purchasedItems = List<String>.from(userMember?['purchasedItems'] ?? []);
+
+        // Check if already purchased
+        if (purchasedItems.contains(itemId)) {
+          success = true; // Already owned
+          return;
+        }
+
+        // Check if enough coins
+        if (currentCoins < cost) {
+          success = false;
+          return;
+        }
+
+        // Deduct coins and add item
+        purchasedItems.add(itemId);
+        transaction.update(houseRef, {
+          'members.$userId.coins': currentCoins - cost,
+          'members.$userId.purchasedItems': purchasedItems,
+        });
+
+        success = true;
+      });
+
+      if (success) {
+        print('DEBUG: User $userId purchased $itemId for $cost coins');
+      }
+      return success;
+    } catch (e) {
+      print('ERROR: Failed to purchase item: $e');
+      return false;
+    }
+  }
+
+  /// Check if user owns an item
+  Future<bool> ownsItem({
+    required String houseId,
+    required String userId,
+    required String itemId,
+  }) async {
+    try {
+      final houseDoc = await _firestore.collection('houses').doc(houseId).get();
+      if (!houseDoc.exists) {
+        return false;
+      }
+      final data = houseDoc.data() as Map<String, dynamic>?;
+      final members = data?['members'] as Map<String, dynamic>?;
+      final userMember = members?[userId] as Map<String, dynamic>?;
+      final purchasedItems = List<String>.from(userMember?['purchasedItems'] ?? []);
+      return purchasedItems.contains(itemId);
+    } catch (e) {
+      print('ERROR: Failed to check item ownership: $e');
+      return false;
+    }
+  }
+
+  /// Get list of all purchased items for a user
+  Stream<List<String>> getPurchasedItemsStream({
+    required String houseId,
+    required String userId,
+  }) {
+    return _firestore
+        .collection('houses')
+        .doc(houseId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return <String>[];
+      final data = doc.data() as Map<String, dynamic>?;
+      final members = data?['members'] as Map<String, dynamic>?;
+      final userMember = members?[userId] as Map<String, dynamic>?;
+      return List<String>.from(userMember?['purchasedItems'] ?? []);
+    });
   }
 
   // ============ TASK METHODS ============
@@ -1948,6 +2107,30 @@ class FirestoreService {
               'metadata': existingMetadata,
             });
             print('DEBUG: Updated existing activity ${matchingActivity.id} to confirmed state');
+
+            // Award 20 coins to the confirmer
+            try {
+              await awardCoins(
+                houseId: houseId,
+                userId: currentUserId,
+                amount: 20,
+              );
+              print('DEBUG: Awarded 20 coins to $currentUserName for confirming task');
+            } catch (e) {
+              print('ERROR: Failed to award coins for task confirmation: $e');
+            }
+
+            // Award 30 coins to the task completer (now that it's confirmed)
+            try {
+              await awardCoins(
+                houseId: houseId,
+                userId: assignedUserId,
+                amount: 30,
+              );
+              print('DEBUG: Awarded 30 coins to $assignedUserName for completing task');
+            } catch (e) {
+              print('ERROR: Failed to award coins for task completion: $e');
+            }
           } else {
             print('DEBUG: No matching activity found, creating new one');
             // Backward compatibility: Create activity if it doesn't exist
@@ -1968,6 +2151,31 @@ class FirestoreService {
               },
             );
             print('DEBUG: Created new activity for completed task (backward compatibility)');
+
+            // Award coins for backward compatibility case
+            // Award 20 coins to the confirmer
+            try {
+              await awardCoins(
+                houseId: houseId,
+                userId: currentUserId,
+                amount: 20,
+              );
+              print('DEBUG: Awarded 20 coins to $currentUserName for confirming task');
+            } catch (e) {
+              print('ERROR: Failed to award coins for task confirmation: $e');
+            }
+
+            // Award 30 coins to the task completer (now that it's confirmed)
+            try {
+              await awardCoins(
+                houseId: houseId,
+                userId: assignedUserId,
+                amount: 30,
+              );
+              print('DEBUG: Awarded 30 coins to $assignedUserName for completing task');
+            } catch (e) {
+              print('ERROR: Failed to award coins for task completion: $e');
+            }
           }
         } catch (e) {
           print('DEBUG: ERROR updating activity for completed task: $e');
@@ -2315,6 +2523,21 @@ class FirestoreService {
       'createdAt': FieldValue.serverTimestamp(),
       'createdBy': _auth.currentUser!.uid,
     });
+
+    // Award 50 coins to each participant for attending the meeting
+    for (int i = 0; i < participantIds.length; i++) {
+      try {
+        await awardCoins(
+          houseId: houseId,
+          userId: participantIds[i],
+          amount: 50,
+        );
+        final name = i < participantNames.length ? participantNames[i] : 'Member';
+        print('DEBUG: Awarded 50 coins to $name for attending meeting "$title"');
+      } catch (e) {
+        print('ERROR: Failed to award coins for meeting attendance to ${participantIds[i]}: $e');
+      }
+    }
   }
 
   // ============ TIMER METHODS ============

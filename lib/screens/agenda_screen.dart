@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'add_agenda_screen.dart';
 import 'agenda_detail_screen.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +9,7 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/agenda_item_model.dart';
 import '../widgets/beemo_logo.dart';
+import '../widgets/coin_display.dart';
 
 class AgendaScreen extends StatefulWidget {
   const AgendaScreen({super.key});
@@ -147,35 +149,40 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         ),
                       ),
                       const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFC400),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.black, width: 2.5),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              '530',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black,
+                      Consumer2<HouseProvider, AuthProvider>(
+                        builder: (context, houseProvider, authProvider, _) {
+                          final userId = authProvider.user?.uid;
+                          final houseId = houseProvider.currentHouseId;
+
+                          if (userId == null || houseId == null) {
+                            return const CoinDisplay(
+                              points: 0,
+                              fontSize: 16,
+                              coinSize: 20,
+                              fontWeight: FontWeight.w700,
+                              showBorder: true,
+                              borderRadius: 20,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
                               ),
+                            );
+                          }
+
+                          return CoinDisplay(
+                            userId: userId,
+                            houseId: houseId,
+                            fontSize: 16,
+                            coinSize: 20,
+                            fontWeight: FontWeight.w700,
+                            showBorder: true,
+                            borderRadius: 20,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                            const SizedBox(width: 6),
-                            Icon(
-                              Icons.track_changes,
-                              size: 20,
-                              color: Colors.black,
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -544,7 +551,25 @@ class _AgendaScreenState extends State<AgendaScreen> {
                               context,
                             ).popUntil((route) => route.isFirst);
                           },
-                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/cube.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -556,7 +581,33 @@ class _AgendaScreenState extends State<AgendaScreen> {
                           child: _buildBeemoNavIcon(false),
                         ),
                         const SizedBox(width: 12),
-                        _buildNavIcon(Icons.event_note_rounded, true),
+                        Container(
+                          width: 90,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF1B8D),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black, width: 2.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.35),
+                                blurRadius: 16,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 4.0),
+                              child: SvgPicture.asset(
+                                'assets/images/note.svg',
+                                width: 42,
+                                height: 42,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),

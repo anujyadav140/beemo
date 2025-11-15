@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
@@ -125,23 +126,11 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
         if (isAIAssignment) {
           // Beemo icon for AI assignments
           return Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFC400),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.black, width: 2),
+            width: 56,
+            height: 56,
+            child: Center(
+              child: BeemoLogo(size: 42),
             ),
-           child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: BeemoLogo(size: 36)),
-      ),),
-      ),),
-      ),
           );
         } else {
           // Regular assignment icon
@@ -349,7 +338,25 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
                               context,
                             ).popUntil((route) => route.isFirst);
                           },
-                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/cube.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(

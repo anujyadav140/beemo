@@ -60,7 +60,9 @@
       "Bash(python:*)",
       "Bash(powershell -Command \"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait(''R'')\")",
       "Bash(powershell -Command:*)",
-      "Bash(clip)"
+      "Bash(clip)",
+      "Bash(findstr:*)",
+      "Bash(copy:*)"
     ],
     "deny": [],
     "ask": []

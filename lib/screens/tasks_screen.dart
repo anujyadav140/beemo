@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../providers/house_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/task_model.dart';
 import '../widgets/beemo_logo.dart';
+import '../widgets/coin_display.dart';
 import 'dash_screen.dart';
 import 'setup_house_screen.dart';
 
@@ -325,56 +327,33 @@ class _TasksScreenState extends State<TasksScreen> {
                                 );
                               },
                             ),
-                            StreamBuilder<int>(
-                              stream: currentUserId != null
-                                  ? _firestoreService.getUserPointsStream(
-                                      currentUserId,
-                                    )
-                                  : Stream.value(500),
-                              builder: (context, pointsSnapshot) {
-                                final points = pointsSnapshot.data ?? 500;
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFC400),
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(
-                                      color: Colors.black,
-                                      width: 2.5,
+                            currentUserId != null &&
+                                    houseProvider.currentHouseId != null
+                                ? CoinDisplay(
+                                    userId: currentUserId,
+                                    houseId: houseProvider.currentHouseId!,
+                                    fontSize: 18,
+                                    coinSize: 22,
+                                    fontWeight: FontWeight.w900,
+                                    showBorder: true,
+                                    borderRadius: 24,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                  )
+                                : const CoinDisplay(
+                                    points: 0,
+                                    fontSize: 18,
+                                    coinSize: 22,
+                                    fontWeight: FontWeight.w900,
+                                    showBorder: true,
+                                    borderRadius: 24,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
                                     ),
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        points.toString(),
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Container(
-                                        width: 20,
-                                        height: 20,
-                                        decoration: const BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Color(0xFFFF6B6B),
-                                        ),
-                                        child: const Center(
-                                          child: Text(
-                                            '🎯',
-                                            style: TextStyle(fontSize: 10),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
                           ],
                         ),
                         const SizedBox(height: 24),
@@ -491,7 +470,25 @@ class _TasksScreenState extends State<TasksScreen> {
                               ),
                             );
                           },
-                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/cube.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -508,7 +505,25 @@ class _TasksScreenState extends State<TasksScreen> {
                         const SizedBox(width: 12),
                         GestureDetector(
                           onTap: () {},
-                          child: _buildNavIcon(Icons.event_note_rounded, true),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/note.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),

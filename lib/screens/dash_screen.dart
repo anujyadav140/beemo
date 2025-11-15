@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../providers/auth_provider.dart';
 import '../providers/house_provider.dart';
 import '../services/firestore_service.dart';
@@ -22,6 +23,7 @@ import 'recent_activity_screen.dart';
 import 'account_settings_screen.dart';
 import 'meeting_screen.dart';
 import 'dart:async';
+import '../widgets/coin_display.dart';
 
 class DashScreen extends StatefulWidget {
   const DashScreen({super.key});
@@ -441,77 +443,22 @@ class _DashScreenState extends State<DashScreen> {
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              StreamBuilder<DocumentSnapshot>(
-                                stream: userId != null
-                                    ? FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(userId)
-                                          .snapshots()
-                                    : null,
-                                builder: (context, pointsSnapshot) {
-                                  int points = 500;
-                                  if (pointsSnapshot.hasData &&
-                                      pointsSnapshot.data != null) {
-                                    final userData =
-                                        pointsSnapshot.data!.data()
-                                            as Map<String, dynamic>?;
-                                    points =
-                                        userData?['profile']?['points'] ?? 500;
-                                  }
-
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 6,
+                              userId != null && houseId != null
+                                  ? CoinDisplay(
+                                      userId: userId,
+                                      houseId: houseId,
+                                      fontSize: 18,
+                                      coinSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      showBorder: true,
+                                    )
+                                  : const CoinDisplay(
+                                      points: 0,
+                                      fontSize: 18,
+                                      coinSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      showBorder: true,
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFFC400),
-                                      borderRadius: BorderRadius.circular(18),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          points.toString(),
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Stack(
-                                          alignment: Alignment.center,
-                                          children: [
-                                            Container(
-                                              width: 22,
-                                              height: 22,
-                                              decoration: BoxDecoration(
-                                                color: Colors.orange[800],
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                            Container(
-                                              width: 14,
-                                              height: 14,
-                                              decoration: const BoxDecoration(
-                                                color: Color(0xFFFF9500),
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                            Container(
-                                              width: 6,
-                                              height: 6,
-                                              decoration: BoxDecoration(
-                                                color: Colors.orange[900],
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
                             ],
                           );
                         },
@@ -1109,7 +1056,25 @@ class _DashScreenState extends State<DashScreen> {
                               ),
                             );
                           },
-                          child: _buildNavIcon(Icons.view_in_ar_rounded, false),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/cube.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -1126,7 +1091,25 @@ class _DashScreenState extends State<DashScreen> {
                               ),
                             );
                           },
-                          child: _buildNavIcon(Icons.event_note_rounded, false),
+                          child: Container(
+                            width: 90,
+                            height: 90,
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4.0),
+                                child: SvgPicture.asset(
+                                  'assets/images/note.svg',
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),

@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../providers/house_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/beemo_logo.dart';
+import '../widgets/coin_display.dart';
 import 'agenda_screen.dart';
 import 'setup_house_screen.dart';
 
@@ -137,56 +140,30 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                           );
                         },
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFC400),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Row(
-                          children: [
-                            const Text(
-                              '500',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Container(
-                                  width: 22,
-                                  height: 22,
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange[800],
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                Container(
-                                  width: 14,
-                                  height: 14,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFFFF9500),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange[900],
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                      Consumer2<HouseProvider, AuthProvider>(
+                        builder: (context, houseProvider, authProvider, _) {
+                          final userId = authProvider.user?.uid;
+                          final houseId = houseProvider.currentHouseId;
+
+                          if (userId == null || houseId == null) {
+                            return const CoinDisplay(
+                              points: 0,
+                              fontSize: 18,
+                              coinSize: 22,
+                              fontWeight: FontWeight.bold,
+                              showBorder: true,
+                            );
+                          }
+
+                          return CoinDisplay(
+                            userId: userId,
+                            houseId: houseId,
+                            fontSize: 18,
+                            coinSize: 22,
+                            fontWeight: FontWeight.bold,
+                            showBorder: true,
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -394,9 +371,24 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                                   ),
                                 );
                               },
-                              child: _buildNavIcon(
-                                Icons.view_in_ar_rounded,
-                                false,
+                              child: Container(
+                                width: 90,
+                                height: 90,
+                                decoration: const BoxDecoration(
+                                  color: Colors.transparent,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 4.0),
+                                    child: SvgPicture.asset(
+                                      'assets/images/cube.svg',
+                                      width: 42,
+                                      height: 42,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -418,9 +410,24 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                                   ),
                                 );
                               },
-                              child: _buildNavIcon(
-                                Icons.event_note_rounded,
-                                false,
+                              child: Container(
+                                width: 90,
+                                height: 90,
+                                decoration: const BoxDecoration(
+                                  color: Colors.transparent,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 4.0),
+                                    child: SvgPicture.asset(
+                                      'assets/images/note.svg',
+                                      width: 42,
+                                      height: 42,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ],

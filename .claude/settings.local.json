@@ -63,7 +63,8 @@
       "Bash(clip)",
       "Bash(findstr:*)",
       "Bash(copy:*)",
-      "Bash(where:*)"
+      "Bash(where:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

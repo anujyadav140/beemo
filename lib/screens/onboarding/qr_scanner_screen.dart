@@ -88,7 +88,20 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       final houseId = houseDoc.id;
       final houseData = houseDoc.data();
       final houseName = houseData['houseName'] ?? 'House';
-      final members = List<String>.from(houseData['members'] ?? []);
+
+      // Handle both member formats: List (array) or Map (object)
+      List<String> members;
+      final membersData = houseData['members'];
+      if (membersData is List) {
+        // Members stored as array: ['userId1', 'userId2', ...]
+        members = List<String>.from(membersData);
+      } else if (membersData is Map) {
+        // Members stored as map: { 'userId1': {...}, 'userId2': {...} }
+        members = membersData.keys.cast<String>().toList();
+      } else {
+        members = [];
+      }
+
       final memberCount = houseData['memberCount'] ?? members.length;
       final maxMembers = houseData['maxMembers'] ?? 4;
 
@@ -108,11 +121,31 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         return;
       }
 
-      // Add user to house members
-      await _firestore.collection('houses').doc(houseId).update({
-        'members': FieldValue.arrayUnion([userId]),
-        'memberCount': FieldValue.increment(1),
-      });
+      // Get user data for the member info
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userData = userDoc.data();
+      final userName = userData?['profile']?['name'] ?? 'User';
+
+      // Add user to house members based on current format
+      if (membersData is List) {
+        // Members stored as array - use arrayUnion
+        await _firestore.collection('houses').doc(houseId).update({
+          'members': FieldValue.arrayUnion([userId]),
+          'memberCount': FieldValue.increment(1),
+        });
+      } else {
+        // Members stored as map - add as map entry
+        await _firestore.collection('houses').doc(houseId).update({
+          'members.$userId': {
+            'name': userName,
+            'role': 'member',
+            'joinedAt': FieldValue.serverTimestamp(),
+            'coins': 0,
+            'purchasedItems': [],
+          },
+          'memberCount': FieldValue.increment(1),
+        });
+      }
 
       // Update user's house reference
       await _firestore.collection('users').doc(userId).update({
@@ -124,6 +157,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
       // Set current house in provider
       houseProvider.setCurrentHouseId(houseId);
+
+      // Wait a moment for the state to propagate
+      await Future.delayed(const Duration(milliseconds: 300));
 
       // Show success dialog
       if (mounted) {

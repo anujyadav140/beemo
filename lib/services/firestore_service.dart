@@ -2985,18 +2985,30 @@ class FirestoreService {
     required String houseId,
     required String roomName,
     required List<Map<String, dynamic>> furnitureItems,
+    String? floorColor,
+    String? wallColor,
   }) async {
     try {
       await _retryOperation(() async {
+        final data = <String, dynamic>{
+          'furniture_items': furnitureItems,
+          'last_modified': FieldValue.serverTimestamp(),
+        };
+
+        // Only include colors if provided
+        if (floorColor != null) {
+          data['floor_color'] = floorColor;
+        }
+        if (wallColor != null) {
+          data['wall_color'] = wallColor;
+        }
+
         await _firestore
             .collection('houses')
             .doc(houseId)
             .collection('rooms')
             .doc(roomName)
-            .set({
-          'furniture_items': furnitureItems,
-          'last_modified': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+            .set(data, SetOptions(merge: true));
       });
       print('✅ Saved furniture state for room: $roomName');
     } catch (e) {
@@ -3035,6 +3047,49 @@ class FirestoreService {
     }
   }
 
+  /// Load the complete room state including furniture and colors
+  Future<Map<String, dynamic>> loadCompleteRoomState({
+    required String houseId,
+    required String roomName,
+  }) async {
+    try {
+      final snapshot = await _retryOperation(() async {
+        return await _firestore
+            .collection('houses')
+            .doc(houseId)
+            .collection('rooms')
+            .doc(roomName)
+            .get();
+      });
+
+      if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
+        final items = data['furniture_items'] as List<dynamic>?;
+        final floorColor = data['floor_color'] as String?;
+        final wallColor = data['wall_color'] as String?;
+
+        return {
+          'furniture_items': items?.map((item) => item as Map<String, dynamic>).toList() ?? [],
+          'floor_color': floorColor ?? '#f5e6d3',
+          'wall_color': wallColor ?? '#e8dcc8',
+        };
+      }
+      print('📭 No room state found for: $roomName');
+      return {
+        'furniture_items': [],
+        'floor_color': '#f5e6d3',
+        'wall_color': '#e8dcc8',
+      };
+    } catch (e) {
+      print('❌ Failed to load complete room state for $roomName: $e');
+      return {
+        'furniture_items': [],
+        'floor_color': '#f5e6d3',
+        'wall_color': '#e8dcc8',
+      };
+    }
+  }
+
   /// Stream of furniture state changes for a specific room
   Stream<List<Map<String, dynamic>>> getRoomFurnitureStateStream({
     required String houseId,
@@ -3055,6 +3110,38 @@ class FirestoreService {
         }
       }
       return <Map<String, dynamic>>[];
+    });
+  }
+
+  /// Stream of complete room state including furniture and colors
+  Stream<Map<String, dynamic>> getCompleteRoomStateStream({
+    required String houseId,
+    required String roomName,
+  }) {
+    return _firestore
+        .collection('houses')
+        .doc(houseId)
+        .collection('rooms')
+        .doc(roomName)
+        .snapshots()
+        .map((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
+        final items = data['furniture_items'] as List<dynamic>?;
+        final floorColor = data['floor_color'] as String?;
+        final wallColor = data['wall_color'] as String?;
+
+        return {
+          'furniture_items': items?.map((item) => item as Map<String, dynamic>).toList() ?? [],
+          'floor_color': floorColor ?? '#f5e6d3',
+          'wall_color': wallColor ?? '#e8dcc8',
+        };
+      }
+      return {
+        'furniture_items': [],
+        'floor_color': '#f5e6d3',
+        'wall_color': '#e8dcc8',
+      };
     });
   }
 

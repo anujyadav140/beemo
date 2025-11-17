@@ -37,6 +37,8 @@ class _DashScreenState extends State<DashScreen> {
   Timer? _meetingPopupTimer;
   bool _meetingPopupShown = false;
   DateTime? _lastScheduledMeeting;
+  int _beemoTapCount = 0; // Testing hack: tap 20 times for 1000 coins
+  Timer? _beemoTapResetTimer; // Reset tap count if not consecutive
 
   @override
   void initState() {
@@ -57,6 +59,7 @@ class _DashScreenState extends State<DashScreen> {
   void dispose() {
     _messageController.dispose();
     _meetingPopupTimer?.cancel();
+    _beemoTapResetTimer?.cancel();
     super.dispose();
   }
 
@@ -113,6 +116,76 @@ class _DashScreenState extends State<DashScreen> {
            time1.day == time2.day &&
            time1.hour == time2.hour &&
            (time1.minute - time2.minute).abs() < 10;
+  }
+
+  // Testing hack: 20 consecutive Beemo taps = 1000 coins
+  void _handleBeemoTap() async {
+    // Cancel previous reset timer
+    _beemoTapResetTimer?.cancel();
+
+    // Increment tap count
+    setState(() {
+      _beemoTapCount++;
+    });
+
+    // Debug: Show current tap count (for testing)
+    print('🎮 Beemo taps: $_beemoTapCount/20');
+
+    // Check if reached 20 taps
+    if (_beemoTapCount >= 20) {
+      // Award 1000 coins
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+      final userId = authProvider.user?.uid;
+      final houseId = houseProvider.currentHouseId;
+
+      if (userId != null && houseId != null) {
+        try {
+          // Add 1000 coins
+          await FirebaseFirestore.instance
+              .collection('houses')
+              .doc(houseId)
+              .update({
+            'members.$userId.coins': FieldValue.increment(1000),
+          });
+
+          // Reset tap count
+          setState(() {
+            _beemoTapCount = 0;
+          });
+
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('🎉 Testing Mode: +1000 coins!'),
+                backgroundColor: Color(0xFF4CAF50),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } catch (e) {
+          print('❌ Failed to award coins: $e');
+          setState(() {
+            _beemoTapCount = 0;
+          });
+        }
+      } else {
+        setState(() {
+          _beemoTapCount = 0;
+        });
+      }
+    } else {
+      // Start reset timer (2 seconds)
+      _beemoTapResetTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _beemoTapCount = 0;
+          });
+          print('⏰ Beemo tap count reset (not consecutive)');
+        }
+      });
+    }
   }
 
   void _showMeetingPopup() {
@@ -717,10 +790,7 @@ class _DashScreenState extends State<DashScreen> {
                                                 ),
                                               ),
                                               child: const Center(
-                                                child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: BeemoLogo(size: 36)),
-      ),
+                                                child: BeemoLogo(size: 14),
                                               ),
                                             ),
                                           ),
@@ -742,10 +812,7 @@ class _DashScreenState extends State<DashScreen> {
                                                 ),
                                               ),
                                               child: const Center(
-                                                child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: BeemoLogo(size: 36)),
-      ),
+                                                child: BeemoLogo(size: 14),
                                               ),
                                             ),
                                           ),
@@ -901,13 +968,14 @@ class _DashScreenState extends State<DashScreen> {
                                                   child: Center(
                                                     child: isBeemo
                                                         ? const BeemoLogo(
-                                                            size: 38,
+                                                            size: 14,
                                                           )
                                                         : Text(
                                                             senderAvatar,
                                                             style:
                                                                 const TextStyle(
                                                                   fontSize: 13,
+                                                                  fontWeight: FontWeight.w600,
                                                                 ),
                                                           ),
                                                   ),
@@ -1078,7 +1146,7 @@ class _DashScreenState extends State<DashScreen> {
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
-                          onTap: () {},
+                          onTap: _handleBeemoTap,
                           child: _buildBeemoNavIcon(true),
                         ),
                         const SizedBox(width: 12),

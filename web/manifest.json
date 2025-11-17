@@ -3,12 +3,23 @@
     "short_name": "beemo",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFC400",
+    "theme_color": "#FFC400",
+    "description": "Beemo - Your AI-powered household task management app",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
+        {
+            "src": "beemo_icon_square.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        },
+        {
+            "src": "beemo_icon_square.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        },
         {
             "src": "icons/Icon-192.png",
             "sizes": "192x192",

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -29,6 +30,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
   String _selectedFloorColor = '#f5e6d3';
   String _selectedWallColor = '#e8dcc8';
   String _paintCategory = 'floors'; // 'floors' or 'walls'
+  StreamSubscription<Map<String, dynamic>>? _roomStateSubscription;
 
   final List<Map<String, dynamic>> _rooms = [
     {'name': 'Living Room'},
@@ -88,12 +90,169 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       emoji: '💡',
       imageUrl: 'assets/images/furniture/lamp.png',
     ),
+    // New furniture items (behind paywall)
+    FurnitureItem(
+      id: 'arcade',
+      name: 'Arcade',
+      type: 'furniture',
+      emoji: '🕹️',
+      imageUrl: 'assets/images/furniture/arcade.png',
+    ),
+    FurnitureItem(
+      id: 'bed',
+      name: 'Bed',
+      type: 'furniture',
+      emoji: '🛏️',
+      imageUrl: 'assets/images/furniture/bed.png',
+    ),
+    FurnitureItem(
+      id: 'beemo_box',
+      name: 'Beemo Box',
+      type: 'decor',
+      emoji: '📦',
+      imageUrl: 'assets/images/furniture/beemo_box.png',
+    ),
+    FurnitureItem(
+      id: 'chess_table',
+      name: 'Chess Table',
+      type: 'furniture',
+      emoji: '♟️',
+      imageUrl: 'assets/images/furniture/chess_table.png',
+    ),
+    FurnitureItem(
+      id: 'computer',
+      name: 'Computer',
+      type: 'furniture',
+      emoji: '💻',
+      imageUrl: 'assets/images/furniture/computer.png',
+    ),
+    FurnitureItem(
+      id: 'kitchen',
+      name: 'Kitchen',
+      type: 'furniture',
+      emoji: '🍳',
+      imageUrl: 'assets/images/furniture/kitchen.png',
+    ),
+    FurnitureItem(
+      id: 'music_box',
+      name: 'Music Box',
+      type: 'decor',
+      emoji: '🎵',
+      imageUrl: 'assets/images/furniture/music_box.png',
+    ),
+    FurnitureItem(
+      id: 'music_system',
+      name: 'Music System',
+      type: 'furniture',
+      emoji: '🔊',
+      imageUrl: 'assets/images/furniture/music_system.png',
+    ),
+    FurnitureItem(
+      id: 'music_system_white',
+      name: 'Music System White',
+      type: 'furniture',
+      emoji: '🔈',
+      imageUrl: 'assets/images/furniture/music_system_white.png',
+    ),
+    FurnitureItem(
+      id: 'pc_table',
+      name: 'PC Table',
+      type: 'furniture',
+      emoji: '🖥️',
+      imageUrl: 'assets/images/furniture/pc_table.png',
+    ),
+    FurnitureItem(
+      id: 'piano',
+      name: 'Piano',
+      type: 'furniture',
+      emoji: '🎹',
+      imageUrl: 'assets/images/furniture/piano.png',
+    ),
+    FurnitureItem(
+      id: 'plant',
+      name: 'Plant',
+      type: 'decor',
+      emoji: '🪴',
+      imageUrl: 'assets/images/furniture/plant.png',
+    ),
+    FurnitureItem(
+      id: 'tv',
+      name: 'TV',
+      type: 'furniture',
+      emoji: '📺',
+      imageUrl: 'assets/images/furniture/tv.png',
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
     _initializeWebView();
+    _setupRoomStateListener();
+  }
+
+  @override
+  void dispose() {
+    _roomStateSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupRoomStateListener() {
+    // Set up listener after first frame to ensure providers are available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+      final houseId = houseProvider.currentHouseId;
+
+      if (houseId == null) return;
+
+      final roomName = _getRoomKey(_currentRoomIndex);
+
+      _roomStateSubscription = _firestoreService
+          .getCompleteRoomStateStream(
+            houseId: houseId,
+            roomName: roomName,
+          )
+          .listen((roomState) {
+        if (!mounted) return;
+
+        final floorColor = roomState['floor_color'] as String;
+        final wallColor = roomState['wall_color'] as String;
+
+        // Only update if colors changed (to avoid circular updates)
+        if (floorColor != _selectedFloorColor || wallColor != _selectedWallColor) {
+          setState(() {
+            _selectedFloorColor = floorColor;
+            _selectedWallColor = wallColor;
+          });
+
+          // Update webview with new colors (without saving back to Firebase)
+          if (_isWebViewReady) {
+            _updateWebViewColors(floorColor, wallColor);
+          }
+
+          print('🔄 Colors synced from Firebase: floor=$floorColor, wall=$wallColor');
+        }
+      });
+    });
+  }
+
+  void _updateWebViewColors(String floorColor, String wallColor) {
+    if (!_isWebViewReady) return;
+
+    // Calculate floor color variants
+    final darkFloorColor = _darkenColor(floorColor, 0.15);
+
+    _webViewController.runJavaScript(
+      "window.postMessage(JSON.stringify({ type: 'CHANGE_FLOOR_COLOR', light: '$floorColor', dark: '$darkFloorColor' }), '*');",
+    );
+
+    // Calculate wall color variants
+    final topWallColor = _lightenColor(wallColor, 0.1);
+    final bottomWallColor = _darkenColor(wallColor, 0.1);
+
+    _webViewController.runJavaScript(
+      "window.postMessage(JSON.stringify({ type: 'CHANGE_WALL_COLOR', base: '$wallColor', top: '$topWallColor', bottom: '$bottomWallColor' }), '*');",
+    );
   }
 
   void _initializeWebView() {
@@ -153,9 +312,10 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     final item = data['item'] as Map<String, dynamic>?;
     if (item == null) return;
 
-    // Add to current state
+    // Add to current state and clear selection
     setState(() {
       _currentRoomFurniture.add(item);
+      _selectedItemId = null; // Clear selection after placing item
     });
 
     // Save to Firebase
@@ -242,21 +402,30 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     final roomName = _getRoomKey(_currentRoomIndex);
 
     try {
-      final furnitureItems = await _firestoreService.loadRoomFurnitureState(
+      final roomState = await _firestoreService.loadCompleteRoomState(
         houseId: houseId,
         roomName: roomName,
       );
 
+      final furnitureItems = roomState['furniture_items'] as List<Map<String, dynamic>>;
+      final floorColor = roomState['floor_color'] as String;
+      final wallColor = roomState['wall_color'] as String;
+
       setState(() {
         _currentRoomFurniture = furnitureItems;
+        _selectedFloorColor = floorColor;
+        _selectedWallColor = wallColor;
       });
 
-      // Send loaded state to WebView
+      // Send loaded state to WebView including colors
       if (_isWebViewReady) {
         _sendStateToWebView();
+        // Also send the colors to update the webview
+        _changeFloorColor(floorColor);
+        _changeWallColor(wallColor);
       }
 
-      print('📦 Loaded ${furnitureItems.length} items for $roomName');
+      print('📦 Loaded ${furnitureItems.length} items, floor: $floorColor, wall: $wallColor for $roomName');
     } catch (e) {
       print('❌ Failed to load room state: $e');
     }
@@ -318,6 +487,9 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
         "window.postMessage(JSON.stringify({ type: 'CHANGE_FLOOR_COLOR', light: '$color', dark: '$darkColor' }), '*');",
       );
     }
+
+    // Save to Firebase
+    _saveColorToFirebase();
   }
 
   void _changeWallColor(String color) {
@@ -333,6 +505,34 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       _webViewController.runJavaScript(
         "window.postMessage(JSON.stringify({ type: 'CHANGE_WALL_COLOR', base: '$color', top: '$topColor', bottom: '$bottomColor' }), '*');",
       );
+    }
+
+    // Save to Firebase
+    _saveColorToFirebase();
+  }
+
+  Future<void> _saveColorToFirebase() async {
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final houseId = houseProvider.currentHouseId;
+
+    if (houseId == null) {
+      print('⚠️  No house ID available, skipping color save');
+      return;
+    }
+
+    final roomName = _getRoomKey(_currentRoomIndex);
+
+    try {
+      await _firestoreService.saveRoomFurnitureState(
+        houseId: houseId,
+        roomName: roomName,
+        furnitureItems: _currentRoomFurniture,
+        floorColor: _selectedFloorColor,
+        wallColor: _selectedWallColor,
+      );
+      print('🎨 Saved colors for $roomName: floor=$_selectedFloorColor, wall=$_selectedWallColor');
+    } catch (e) {
+      print('❌ Failed to save colors: $e');
     }
   }
 
@@ -438,6 +638,73 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     );
   }
 
+  Future<void> _handleFurniturePurchase(
+    String itemId,
+    String itemName,
+    int currentCoins,
+  ) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final userId = authProvider.user?.uid;
+    final houseId = houseProvider.currentHouseId;
+
+    if (userId == null || houseId == null) return;
+
+    const cost = 50;
+
+    showDialog(
+      context: context,
+      builder: (context) => PurchaseConfirmationDialog(
+        itemName: itemName,
+        cost: cost,
+        currentCoins: currentCoins,
+        onConfirm: () async {
+          Navigator.of(context).pop();
+
+          // Show loading indicator
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Processing purchase...'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+
+          // Attempt purchase with furniture_itemId format
+          final purchaseItemId = 'furniture_$itemId';
+          final success = await _firestoreService.purchaseItem(
+            houseId: houseId,
+            userId: userId,
+            itemId: purchaseItemId,
+            cost: cost,
+          );
+
+          if (!mounted) return;
+
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$itemName unlocked!'),
+                backgroundColor: const Color(0xFF4CAF50),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Purchase failed. Please try again.'),
+                backgroundColor: Color(0xFFE57373),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+        onCancel: () {
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
   Widget _buildColorOption(
     Map<String, dynamic> option,
     Color color,
@@ -480,63 +747,77 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
             width: isSelected ? 3 : 2,
           ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Stack(
           children: [
-            // Color preview circle - centered
-            Center(
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.15),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Color preview circle - centered
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-                child: isLocked
-                    ? Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.lock,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      )
-                    : null,
-              ),
+                const SizedBox(height: 5),
+                // Color name
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3.0),
+                  child: Text(
+                    itemName,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      height: 1.0,
+                      color: isSelected
+                          ? const Color(0xFFFF4D8D)
+                          : isLocked
+                          ? Colors.grey
+                          : Colors.black,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 5),
-            // Color name
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 3.0),
-              child: Text(
-                itemName,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  height: 1.0,
-                  color: isSelected
-                      ? const Color(0xFFFF4D8D)
-                      : isLocked
-                      ? Colors.grey
-                      : Colors.black,
+            // Lock icon overlay - top right corner
+            if (isLocked)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.8),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.lock,
+                    color: Colors.white,
+                    size: 14,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -617,6 +898,207 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
             '🎨',
             style: TextStyle(fontSize: _isPaintModeActive ? 26 : 24),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFurnitureList() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final houseProvider = Provider.of<HouseProvider>(context, listen: false);
+    final userId = authProvider.user?.uid;
+    final houseId = houseProvider.currentHouseId;
+
+    // If user is not logged in or no house, show all items as unlocked
+    if (userId == null || houseId == null) {
+      return ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        itemCount: _allFurnitureItems.length,
+        itemBuilder: (context, index) {
+          final item = _allFurnitureItems[index];
+          final isSelected = _selectedItemId == item.id;
+          final isFree = index < 7; // First 7 items are free
+
+          return _buildFurnitureItem(item, isSelected, isFree, false, [], 0);
+        },
+      );
+    }
+
+    // Use StreamBuilder to check ownership
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('houses')
+          .doc(houseId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        List<String> purchasedItems = [];
+        int currentCoins = 0;
+
+        if (snapshot.hasData && snapshot.data != null) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+
+          // Handle both Map and List formats for members
+          final membersData = data?['members'];
+          Map<String, dynamic>? members;
+
+          if (membersData is Map<String, dynamic>) {
+            members = membersData;
+          } else if (membersData is List) {
+            members = {};
+          }
+
+          final userMember = members?[userId] as Map<String, dynamic>?;
+          purchasedItems = List<String>.from(
+            userMember?['purchasedItems'] ?? [],
+          );
+          currentCoins = (userMember?['coins'] ?? 0) as int;
+        }
+
+        return ListView.builder(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          itemCount: _allFurnitureItems.length,
+          itemBuilder: (context, index) {
+            final item = _allFurnitureItems[index];
+            final isSelected = _selectedItemId == item.id;
+            final isFree = index < 7; // First 7 items are free
+            final itemId = 'furniture_${item.id}';
+            final isOwned = purchasedItems.contains(itemId);
+
+            return _buildFurnitureItem(
+              item,
+              isSelected,
+              isFree,
+              isOwned,
+              purchasedItems,
+              currentCoins,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFurnitureItem(
+    FurnitureItem item,
+    bool isSelected,
+    bool isFree,
+    bool isOwned,
+    List<String> purchasedItems,
+    int currentCoins,
+  ) {
+    final isLocked = !isFree && !isOwned;
+
+    return GestureDetector(
+      onTap: () {
+        if (isLocked) {
+          // Show purchase dialog
+          _handleFurniturePurchase(item.id, item.name, currentCoins);
+        } else {
+          // Free or owned - allow selection
+          _selectFurnitureItem(item.id);
+        }
+      },
+      child: Container(
+        width: 115,
+        margin: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFFFF4D8D)
+              : isLocked
+              ? Colors.grey[200]
+              : Colors.grey[50],
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFFFF4D8D)
+                : Colors.black,
+            width: 2,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: item.imageUrl != null && item.imageUrl!.startsWith("assets/")
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Opacity(
+                              opacity: isLocked ? 0.3 : 1.0,
+                              child: Image.asset(
+                                item.imageUrl!,
+                                fit: BoxFit.contain,
+                                alignment: Alignment.center,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Center(
+                                    child: Text(
+                                      item.emoji,
+                                      style: const TextStyle(fontSize: 40),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Opacity(
+                            opacity: isLocked ? 0.3 : 1.0,
+                            child: Text(
+                              item.emoji,
+                              style: const TextStyle(fontSize: 40),
+                            ),
+                          ),
+                        ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14.0),
+                  child: Text(
+                    item.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: isSelected
+                          ? Colors.white
+                          : isLocked
+                          ? Colors.grey
+                          : Colors.black,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // Lock icon overlay - top right corner
+            if (isLocked)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.8),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.lock,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -802,7 +1284,18 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                     if (snapshot.hasData && snapshot.data != null) {
                       final data =
                           snapshot.data!.data() as Map<String, dynamic>?;
-                      final members = data?['members'] as Map<String, dynamic>?;
+
+                      // Handle both Map and List formats for members
+                      final membersData = data?['members'];
+                      Map<String, dynamic>? members;
+
+                      if (membersData is Map<String, dynamic>) {
+                        members = membersData;
+                      } else if (membersData is List) {
+                        // If it's a List, we can't access by userId, use empty map
+                        members = {};
+                      }
+
                       final userMember =
                           members?[userId] as Map<String, dynamic>?;
                       purchasedItems = List<String>.from(
@@ -1133,102 +1626,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                       ),
                       child: _isPaintModeActive
                           ? _buildColorPicker()
-                          : ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              itemCount: _allFurnitureItems.length,
-                              itemBuilder: (context, index) {
-                                final item = _allFurnitureItems[index];
-                                final isSelected = _selectedItemId == item.id;
-
-                                return GestureDetector(
-                                  onTap: () {
-                                    _selectFurnitureItem(item.id);
-                                  },
-                                  child: Container(
-                                    width: 115,
-                                    margin: const EdgeInsets.only(right: 16),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? const Color(0xFFFF4D8D)
-                                          : Colors.grey[50],
-                                      borderRadius: BorderRadius.circular(24),
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? const Color(0xFFFF4D8D)
-                                            : Colors.black,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Expanded(
-                                          child:
-                                              item.imageUrl != null &&
-                                                  item.imageUrl!.startsWith(
-                                                    "assets/",
-                                                  )
-                                              ? Padding(
-                                                  padding: const EdgeInsets.all(
-                                                    12.0,
-                                                  ),
-                                                  child: Image.asset(
-                                                    item.imageUrl!,
-                                                    fit: BoxFit.contain,
-                                                    errorBuilder:
-                                                        (
-                                                          context,
-                                                          error,
-                                                          stackTrace,
-                                                        ) {
-                                                          return Center(
-                                                            child: Text(
-                                                              item.emoji,
-                                                              style:
-                                                                  const TextStyle(
-                                                                    fontSize:
-                                                                        40,
-                                                                  ),
-                                                            ),
-                                                          );
-                                                        },
-                                                  ),
-                                                )
-                                              : Center(
-                                                  child: Text(
-                                                    item.emoji,
-                                                    style: const TextStyle(
-                                                      fontSize: 40,
-                                                    ),
-                                                  ),
-                                                ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 14.0,
-                                          ),
-                                          child: Text(
-                                            item.name,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w800,
-                                              color: isSelected
-                                                  ? Colors.white
-                                                  : Colors.black,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                          : _buildFurnitureList(),
                     ),
                   ],
                 ),

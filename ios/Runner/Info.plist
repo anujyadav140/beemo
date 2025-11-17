@@ -45,5 +45,17 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Camera permission for QR scanning and image picker -->
+	<key>NSCameraUsageDescription</key>
+	<string>Beemo needs camera access to scan QR codes and take photos.</string>
+	<!-- Microphone permission for voice recording and video calls -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Beemo needs microphone access for voice messages and video calls.</string>
+	<!-- Photo library permission for image picker -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Beemo needs access to your photo library to select images.</string>
+	<!-- Local network permission for Agora RTC -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Beemo needs local network access for video calls.</string>
 </dict>
 </plist>

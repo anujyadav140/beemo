@@ -772,17 +772,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
       avatarWidgets.add(
         Positioned(
-          left: index * 14.0,
+          left: index * 20.0,
           child: Container(
-            width: 24,
-            height: 24,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: color,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(color: Colors.black, width: 2),
             ),
             child: Center(
-              child: Text(avatarEmoji, style: const TextStyle(fontSize: 12)),
+              child: Text(avatarEmoji, style: const TextStyle(fontSize: 16)),
             ),
           ),
         ),
@@ -791,12 +791,12 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     avatarWidgets.add(
-      Positioned(left: index * 14.0, child: _buildBeemoAvatar()),
+      Positioned(left: index * 20.0, child: _buildBeemoAvatar()),
     );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: SizedBox(height: 24, child: Stack(children: avatarWidgets)),
+      child: SizedBox(height: 36, child: Stack(children: avatarWidgets)),
     );
   }
 
@@ -895,6 +895,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+
   Future<void> _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
 
@@ -902,6 +903,15 @@ class _ChatScreenState extends State<ChatScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     if (houseProvider.currentHouseId == null || authProvider.user == null) {
+      return;
+    }
+
+    final messageText = _messageController.text.trim();
+
+    // Check if it's a slash command
+    if (messageText == '/check-in') {
+      _messageController.clear();
+      await _startWeeklyCheckInMeeting(autoTriggered: false);
       return;
     }
 
@@ -929,8 +939,6 @@ class _ChatScreenState extends State<ChatScreen> {
         .toRadixString(16)
         .padLeft(8, '0')
         .substring(2);
-
-    final messageText = _messageController.text.trim();
 
     // Send the message
     await _firestoreService.sendMessage(
@@ -1623,7 +1631,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               left: 12,
                               right: 12,
                               top: 8,
-                              bottom: 80, // Space for the input bar
+                              bottom: 80,
                             ),
                             itemCount: messages.isEmpty ? 1 : messages.length,
                             itemBuilder: (context, index) {
@@ -1799,16 +1807,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildBeemoAvatar() {
     return Container(
-      width: 24,
-      height: 24,
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
         color: const Color(0xFFFFC400),
         shape: BoxShape.circle,
         border: Border.all(color: Colors.black, width: 2),
       ),
-     child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: BeemoLogo(size: 36)),
+      child: Center(
+        child: BeemoLogo(size: 20),
       ),
     );
   }
@@ -1828,17 +1835,16 @@ class _ChatScreenState extends State<ChatScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 24,
-          height: 24,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
             color: const Color(0xFFFFC400),
             shape: BoxShape.circle,
             border: Border.all(color: Colors.black, width: 2),
           ),
-          child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: BeemoLogo(size: 36)),
-      ),
+          child: Center(
+            child: BeemoLogo(size: 20),
+          ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -1963,11 +1969,11 @@ class _ChatScreenState extends State<ChatScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 24,
-          height: 24,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
             color: avatarColor,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: Colors.black, width: 2),
           ),
           child: Center(
@@ -1975,8 +1981,8 @@ class _ChatScreenState extends State<ChatScreen> {
               avatar,
               style: TextStyle(
                 color: textColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
               ),
             ),
           ),
@@ -2024,17 +2030,16 @@ class _ChatScreenState extends State<ChatScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 24,
-          height: 24,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
             color: const Color(0xFFFFC400),
             shape: BoxShape.circle,
             border: Border.all(color: Colors.black, width: 2),
           ),
-         child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: BeemoLogo(size: 36)),
-      ),
+          child: Center(
+            child: BeemoLogo(size: 20),
+          ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -2110,17 +2115,16 @@ class _ChatScreenState extends State<ChatScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 24,
-          height: 24,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
             color: const Color(0xFFFFC400),
             shape: BoxShape.circle,
             border: Border.all(color: Colors.black, width: 2),
           ),
-         child: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Center(child: BeemoLogo(size: 36)),
-      ),
+          child: Center(
+            child: BeemoLogo(size: 20),
+          ),
         ),
         const SizedBox(width: 8),
         Flexible(

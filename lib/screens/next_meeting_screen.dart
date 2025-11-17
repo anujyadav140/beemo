@@ -83,62 +83,68 @@ class _NextMeetingScreenState extends State<NextMeetingScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      StreamBuilder<DocumentSnapshot>(
-                        stream: houseId != null
-                            ? FirebaseFirestore.instance
-                                  .collection('houses')
-                                  .doc(houseId)
-                                  .snapshots()
-                            : null,
-                        builder: (context, snapshot) {
-                          String houseName = 'House';
-                          String houseEmoji = '🏠';
-                          Color houseColor = const Color(0xFF00BCD4);
+                      Expanded(
+                        child: StreamBuilder<DocumentSnapshot>(
+                          stream: houseId != null
+                              ? FirebaseFirestore.instance
+                                    .collection('houses')
+                                    .doc(houseId)
+                                    .snapshots()
+                              : null,
+                          builder: (context, snapshot) {
+                            String houseName = 'House';
+                            String houseEmoji = '🏠';
+                            Color houseColor = const Color(0xFF00BCD4);
 
-                          if (snapshot.hasData && snapshot.data != null) {
-                            final houseData =
-                                snapshot.data!.data() as Map<String, dynamic>?;
-                            houseName = houseData?['houseName'] ?? 'House';
-                            houseEmoji = houseData?['houseEmoji'] ?? '🏠';
-                            final houseColorInt = houseData?['houseColor'];
-                            if (houseColorInt != null) {
-                              houseColor = Color(houseColorInt);
+                            if (snapshot.hasData && snapshot.data != null) {
+                              final houseData =
+                                  snapshot.data!.data() as Map<String, dynamic>?;
+                              houseName = houseData?['houseName'] ?? 'House';
+                              houseEmoji = houseData?['houseEmoji'] ?? '🏠';
+                              final houseColorInt = houseData?['houseColor'];
+                              if (houseColorInt != null) {
+                                houseColor = Color(houseColorInt);
+                              }
                             }
-                          }
 
-                          return Row(
-                            children: [
-                              Container(
-                                width: 52,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: houseColor,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.black,
-                                    width: 2.5,
+                            return Row(
+                              children: [
+                                Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: houseColor,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.black,
+                                      width: 2.5,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      houseEmoji,
+                                      style: const TextStyle(fontSize: 28),
+                                    ),
                                   ),
                                 ),
-                                child: Center(
+                                const SizedBox(width: 12),
+                                Flexible(
                                   child: Text(
-                                    houseEmoji,
-                                    style: const TextStyle(fontSize: 28),
+                                    houseName,
+                                    style: const TextStyle(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w900,
+                                      fontStyle: FontStyle.italic,
+                                      letterSpacing: -0.5,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                houseName,
-                                style: const TextStyle(
-                                  fontSize: 34,
-                                  fontWeight: FontWeight.w900,
-                                  fontStyle: FontStyle.italic,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
+                              ],
+                            );
+                          },
+                        ),
                       ),
                       Consumer2<HouseProvider, AuthProvider>(
                         builder: (context, houseProvider, authProvider, _) {

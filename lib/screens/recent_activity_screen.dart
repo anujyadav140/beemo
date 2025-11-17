@@ -365,10 +365,28 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
                               context,
                             ).popUntil((route) => route.isFirst);
                           },
-                          child: _buildBeemoNavIcon(false),
+                          child: _buildBeemoNavIcon(true),
                         ),
                         const SizedBox(width: 12),
-                        _buildNavIcon(Icons.history, true),
+                        Container(
+                          width: 90,
+                          height: 90,
+                          decoration: const BoxDecoration(
+                            color: Colors.transparent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 4.0),
+                              child: SvgPicture.asset(
+                                'assets/images/note.svg',
+                                width: 42,
+                                height: 42,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),

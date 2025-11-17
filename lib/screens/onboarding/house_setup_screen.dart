@@ -219,7 +219,20 @@ class _HouseSetupScreenState extends State<HouseSetupScreen> {
       final houseId = houseDoc.id;
       final houseData = houseDoc.data();
       final houseName = houseData['houseName'] ?? 'House';
-      final members = List<String>.from(houseData['members'] ?? []);
+
+      // Handle both member formats: List (array) or Map (object)
+      List<String> members;
+      final membersData = houseData['members'];
+      if (membersData is List) {
+        // Members stored as array: ['userId1', 'userId2', ...]
+        members = List<String>.from(membersData);
+      } else if (membersData is Map) {
+        // Members stored as map: { 'userId1': {...}, 'userId2': {...} }
+        members = membersData.keys.cast<String>().toList();
+      } else {
+        members = [];
+      }
+
       final memberCount = houseData['memberCount'] ?? members.length;
       final maxMembers = houseData['maxMembers'] ?? 4;
 
@@ -245,11 +258,31 @@ class _HouseSetupScreenState extends State<HouseSetupScreen> {
         return;
       }
 
-      // Add user to house members
-      await _firestore.collection('houses').doc(houseId).update({
-        'members': FieldValue.arrayUnion([userId]),
-        'memberCount': FieldValue.increment(1),
-      });
+      // Get user data for the member info
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userData = userDoc.data();
+      final userName = userData?['profile']?['name'] ?? 'User';
+
+      // Add user to house members based on current format
+      if (membersData is List) {
+        // Members stored as array - use arrayUnion
+        await _firestore.collection('houses').doc(houseId).update({
+          'members': FieldValue.arrayUnion([userId]),
+          'memberCount': FieldValue.increment(1),
+        });
+      } else {
+        // Members stored as map - add as map entry
+        await _firestore.collection('houses').doc(houseId).update({
+          'members.$userId': {
+            'name': userName,
+            'role': 'member',
+            'joinedAt': FieldValue.serverTimestamp(),
+            'coins': 0,
+            'purchasedItems': [],
+          },
+          'memberCount': FieldValue.increment(1),
+        });
+      }
 
       // Update user's house reference
       await _firestore.collection('users').doc(userId).update({
@@ -262,15 +295,12 @@ class _HouseSetupScreenState extends State<HouseSetupScreen> {
       // Set current house in provider
       houseProvider.setCurrentHouseId(houseId);
 
-      // Show success message
+      // Wait a moment for the state to propagate
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Show success dialog
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Successfully joined $houseName!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        // AuthWrapper will automatically navigate to onboarding/dashboard
+        _showJoinSuccessDialog(houseName);
       }
     } catch (e) {
       print('Error joining house: $e');
@@ -292,6 +322,104 @@ class _HouseSetupScreenState extends State<HouseSetupScreen> {
         content: Text(message),
         backgroundColor: Colors.red,
       ),
+    );
+  }
+
+  void _showJoinSuccessDialog(String houseName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6, right: 6),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.black, width: 3),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4CAF50),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black, width: 3),
+                    ),
+                    child: const Icon(
+                      Icons.check,
+                      size: 40,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Success!',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'You have joined $houseName',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).pop(); // Close dialog
+                      // AuthWrapper will automatically navigate to onboarding/dashboard
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 5, right: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE91E63),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: Colors.black, width: 3),
+                        ),
+                        child: const Text(
+                          'Continue',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

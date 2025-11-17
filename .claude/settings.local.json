@@ -62,7 +62,8 @@
       "Bash(powershell -Command:*)",
       "Bash(clip)",
       "Bash(findstr:*)",
-      "Bash(copy:*)"
+      "Bash(copy:*)",
+      "Bash(where:*)"
     ],
     "deny": [],
     "ask": []

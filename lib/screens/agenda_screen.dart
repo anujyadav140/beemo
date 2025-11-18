@@ -10,6 +10,7 @@ import '../services/firestore_service.dart';
 import '../models/agenda_item_model.dart';
 import '../widgets/beemo_logo.dart';
 import '../widgets/coin_display.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AgendaScreen extends StatefulWidget {
   const AgendaScreen({super.key});
@@ -189,43 +190,76 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   const SizedBox(height: 32),
 
                   // Upcoming meet text
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Upcoming meet on\n${_getMonthAndDay(_weekDates.last)}',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w400,
-                          height: 1.4,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AddAgendaScreen(),
-                            ),
+                  Consumer<HouseProvider>(
+                    builder: (context, houseProvider, _) {
+                      final houseId = houseProvider.currentHouseId;
+
+                      return StreamBuilder<DocumentSnapshot>(
+                        stream: houseId != null
+                            ? FirebaseFirestore.instance
+                                .collection('nextMeetings')
+                                .doc(houseId)
+                                .snapshots()
+                            : null,
+                        builder: (context, snapshot) {
+                          DateTime? scheduledTime;
+
+                          if (snapshot.hasData &&
+                              snapshot.data != null &&
+                              snapshot.data!.exists) {
+                            final data = snapshot.data!.data() as Map<String, dynamic>?;
+                            final timestamp = data?['scheduledTime'] as Timestamp?;
+                            if (timestamp != null) {
+                              scheduledTime = timestamp.toDate();
+                            }
+                          }
+
+                          final hasMeeting = scheduledTime != null;
+                          final meetingText = hasMeeting
+                              ? 'Upcoming meet on\n${_getMonthAndDay(scheduledTime!)}'
+                              : 'Meeting date hasn\'t\nbeen decided';
+
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                meetingText,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w400,
+                                  height: 1.4,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const AddAgendaScreen(),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFC400),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.black, width: 4),
+                                  ),
+                                  child: const Icon(
+                                    Icons.add,
+                                    color: Colors.black,
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                            ],
                           );
                         },
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFC400),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.black, width: 4),
-                          ),
-                          child: const Icon(
-                            Icons.add,
-                            color: Colors.black,
-                            size: 28,
-                          ),
-                        ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
 

@@ -182,6 +182,42 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       emoji: '📺',
       imageUrl: 'assets/images/furniture/tv.png',
     ),
+    // Wall decor items (paintings) - behind paywall
+    FurnitureItem(
+      id: 'mirror',
+      name: 'Mirror',
+      type: 'decor',
+      emoji: '🪞',
+      imageUrl: 'assets/images/furniture/mirror.png',
+    ),
+    FurnitureItem(
+      id: 'painting',
+      name: 'Painting',
+      type: 'decor',
+      emoji: '🖼️',
+      imageUrl: 'assets/images/furniture/painting.png',
+    ),
+    FurnitureItem(
+      id: 'painting_bmo',
+      name: 'BMO Painting',
+      type: 'decor',
+      emoji: '🎨',
+      imageUrl: 'assets/images/furniture/painting_bmo.png',
+    ),
+    FurnitureItem(
+      id: 'painting_david',
+      name: 'David Painting',
+      type: 'decor',
+      emoji: '🗿',
+      imageUrl: 'assets/images/furniture/painting_david.png',
+    ),
+    FurnitureItem(
+      id: 'painting_creeper',
+      name: 'Creeper Painting',
+      type: 'decor',
+      emoji: '👾',
+      imageUrl: 'assets/images/furniture/painting_creeper.png',
+    ),
   ];
 
   @override

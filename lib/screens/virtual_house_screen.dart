@@ -60,6 +60,7 @@ class _VirtualHouseScreenState extends State<VirtualHouseScreen> {
       emoji: '📚',
       width: 70,
       height: 90,
+      category: 'furniture',
     ),
     FurnitureItem(
       id: 'couch',
@@ -68,6 +69,7 @@ class _VirtualHouseScreenState extends State<VirtualHouseScreen> {
       emoji: '🛋️',
       width: 90,
       height: 70,
+      category: 'furniture',
     ),
     FurnitureItem(
       id: 'desk',
@@ -76,6 +78,7 @@ class _VirtualHouseScreenState extends State<VirtualHouseScreen> {
       emoji: '🖥️',
       width: 100,
       height: 60,
+      category: 'furniture',
     ),
   ];
 
@@ -625,7 +628,11 @@ class _VirtualHouseScreenState extends State<VirtualHouseScreen> {
                       topLeft: Radius.circular(30),
                       topRight: Radius.circular(30),
                     ),
-                    border: Border.all(color: Colors.black, width: 3),
+                    border: const Border(
+                      top: BorderSide(color: Colors.black, width: 3),
+                      left: BorderSide(color: Colors.black, width: 3),
+                      right: BorderSide(color: Colors.black, width: 3),
+                    ),
                   ),
                   child: Column(
                     children: [

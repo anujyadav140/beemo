@@ -31,6 +31,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
   String _selectedWallColor = '#e8dcc8';
   String _paintCategory = 'floors'; // 'floors' or 'walls'
   StreamSubscription<Map<String, dynamic>>? _roomStateSubscription;
+  String _selectedCategory = 'furniture'; // Current furniture category
 
   final List<Map<String, dynamic>> _rooms = [
     {'name': 'Living Room'},
@@ -41,10 +42,12 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
 
   // Available furniture items matching the Next.js app
   final List<FurnitureItem> _allFurnitureItems = [
+    // Furniture category
     FurnitureItem(
       id: 'couch',
       name: 'Couch',
       type: 'furniture',
+      category: 'furniture',
       emoji: '🛋️',
       imageUrl: 'assets/images/furniture/couch.png',
     ),
@@ -52,6 +55,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'table',
       name: 'Table',
       type: 'furniture',
+      category: 'furniture',
       emoji: '🪑',
       imageUrl: 'assets/images/furniture/table.png',
     ),
@@ -59,6 +63,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'bookshelf',
       name: 'Bookshelf',
       type: 'furniture',
+      category: 'furniture',
       emoji: '📚',
       imageUrl: 'assets/images/furniture/bookshelf.png',
     ),
@@ -66,6 +71,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'desk',
       name: 'Desk',
       type: 'furniture',
+      category: 'furniture',
       emoji: '🖥️',
       imageUrl: 'assets/images/furniture/desk.png',
     ),
@@ -73,28 +79,15 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'sofa',
       name: 'Sofa',
       type: 'furniture',
+      category: 'furniture',
       emoji: '🛋️',
       imageUrl: 'assets/images/furniture/sofa.png',
     ),
     FurnitureItem(
-      id: 'rug',
-      name: 'Rug',
-      type: 'decor',
-      emoji: '🟥',
-      imageUrl: 'assets/images/furniture/rug.png',
-    ),
-    FurnitureItem(
-      id: 'lamp',
-      name: 'Lamp',
-      type: 'decor',
-      emoji: '💡',
-      imageUrl: 'assets/images/furniture/lamp.png',
-    ),
-    // New furniture items (behind paywall)
-    FurnitureItem(
       id: 'arcade',
       name: 'Arcade',
       type: 'furniture',
+      category: 'furniture',
       emoji: '🕹️',
       imageUrl: 'assets/images/furniture/arcade.png',
     ),
@@ -102,48 +95,40 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'bed',
       name: 'Bed',
       type: 'furniture',
+      category: 'furniture',
       emoji: '🛏️',
       imageUrl: 'assets/images/furniture/bed.png',
-    ),
-    FurnitureItem(
-      id: 'beemo_box',
-      name: 'Beemo Box',
-      type: 'decor',
-      emoji: '📦',
-      imageUrl: 'assets/images/furniture/beemo_box.png',
     ),
     FurnitureItem(
       id: 'chess_table',
       name: 'Chess Table',
       type: 'furniture',
+      category: 'furniture',
       emoji: '♟️',
       imageUrl: 'assets/images/furniture/chess_table.png',
-    ),
-    FurnitureItem(
-      id: 'computer',
-      name: 'Computer',
-      type: 'furniture',
-      emoji: '💻',
-      imageUrl: 'assets/images/furniture/computer.png',
     ),
     FurnitureItem(
       id: 'kitchen',
       name: 'Kitchen',
       type: 'furniture',
+      category: 'furniture',
       emoji: '🍳',
       imageUrl: 'assets/images/furniture/kitchen.png',
     ),
+    // Electronics category
     FurnitureItem(
-      id: 'music_box',
-      name: 'Music Box',
-      type: 'decor',
-      emoji: '🎵',
-      imageUrl: 'assets/images/furniture/music_box.png',
+      id: 'computer',
+      name: 'Computer',
+      type: 'furniture',
+      category: 'electronics',
+      emoji: '💻',
+      imageUrl: 'assets/images/furniture/computer.png',
     ),
     FurnitureItem(
       id: 'music_system',
       name: 'Music System',
       type: 'furniture',
+      category: 'electronics',
       emoji: '🔊',
       imageUrl: 'assets/images/furniture/music_system.png',
     ),
@@ -151,6 +136,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'music_system_white',
       name: 'Music System White',
       type: 'furniture',
+      category: 'electronics',
       emoji: '🔈',
       imageUrl: 'assets/images/furniture/music_system_white.png',
     ),
@@ -158,6 +144,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'pc_table',
       name: 'PC Table',
       type: 'furniture',
+      category: 'electronics',
       emoji: '🖥️',
       imageUrl: 'assets/images/furniture/pc_table.png',
     ),
@@ -165,28 +152,65 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'piano',
       name: 'Piano',
       type: 'furniture',
+      category: 'electronics',
       emoji: '🎹',
       imageUrl: 'assets/images/furniture/piano.png',
-    ),
-    FurnitureItem(
-      id: 'plant',
-      name: 'Plant',
-      type: 'decor',
-      emoji: '🪴',
-      imageUrl: 'assets/images/furniture/plant.png',
     ),
     FurnitureItem(
       id: 'tv',
       name: 'TV',
       type: 'furniture',
+      category: 'electronics',
       emoji: '📺',
       imageUrl: 'assets/images/furniture/tv.png',
     ),
-    // Wall decor items (paintings) - behind paywall
+    // Decor category
+    FurnitureItem(
+      id: 'rug',
+      name: 'Rug',
+      type: 'decor',
+      category: 'decor',
+      emoji: '🟥',
+      imageUrl: 'assets/images/furniture/rug.png',
+    ),
+    FurnitureItem(
+      id: 'lamp',
+      name: 'Lamp',
+      type: 'decor',
+      category: 'decor',
+      emoji: '💡',
+      imageUrl: 'assets/images/furniture/lamp.png',
+    ),
+    FurnitureItem(
+      id: 'beemo_box',
+      name: 'Beemo Box',
+      type: 'decor',
+      category: 'decor',
+      emoji: '📦',
+      imageUrl: 'assets/images/furniture/beemo_box.png',
+    ),
+    FurnitureItem(
+      id: 'music_box',
+      name: 'Music Box',
+      type: 'decor',
+      category: 'decor',
+      emoji: '🎵',
+      imageUrl: 'assets/images/furniture/music_box.png',
+    ),
+    FurnitureItem(
+      id: 'plant',
+      name: 'Plant',
+      type: 'decor',
+      category: 'decor',
+      emoji: '🪴',
+      imageUrl: 'assets/images/furniture/plant.png',
+    ),
+    // Paintings category
     FurnitureItem(
       id: 'mirror',
       name: 'Mirror',
       type: 'decor',
+      category: 'paintings',
       emoji: '🪞',
       imageUrl: 'assets/images/furniture/mirror.png',
     ),
@@ -194,6 +218,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'painting',
       name: 'Painting',
       type: 'decor',
+      category: 'paintings',
       emoji: '🖼️',
       imageUrl: 'assets/images/furniture/painting.png',
     ),
@@ -201,6 +226,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'painting_bmo',
       name: 'BMO Painting',
       type: 'decor',
+      category: 'paintings',
       emoji: '🎨',
       imageUrl: 'assets/images/furniture/painting_bmo.png',
     ),
@@ -208,6 +234,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'painting_david',
       name: 'David Painting',
       type: 'decor',
+      category: 'paintings',
       emoji: '🗿',
       imageUrl: 'assets/images/furniture/painting_david.png',
     ),
@@ -215,6 +242,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
       id: 'painting_creeper',
       name: 'Creeper Painting',
       type: 'decor',
+      category: 'paintings',
       emoji: '👾',
       imageUrl: 'assets/images/furniture/painting_creeper.png',
     ),
@@ -860,79 +888,37 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     );
   }
 
-  Widget _buildCategoryIconButton(
-    String emoji,
-    Color color, {
-    required bool isLeft,
-    bool isRight = false,
-    bool isMiddle = false,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🚧 Work in Progress - More categories coming soon!'),
-            duration: Duration(seconds: 2),
-            backgroundColor: Color(0xFFFF4D8D),
-          ),
-        );
-      },
-      child: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: isLeft
-              ? const BorderRadius.only(topLeft: Radius.circular(12))
-              : isRight
-              ? const BorderRadius.only(topRight: Radius.circular(12))
-              : BorderRadius.zero,
-          border: Border(
-            top: const BorderSide(color: Colors.black, width: 2),
-            left: isLeft
-                ? const BorderSide(color: Colors.black, width: 2)
-                : BorderSide.none,
-            right: !isMiddle
-                ? const BorderSide(color: Colors.black, width: 2)
-                : BorderSide.none,
-          ),
-        ),
-        child: Center(child: Text(emoji, style: const TextStyle(fontSize: 24))),
-      ),
-    );
-  }
+  Widget _buildCategoryTab(String emoji, String label, String categoryId) {
+    final isSelected = _selectedCategory == categoryId;
 
-  Widget _buildPaintIconButton() {
     return GestureDetector(
       onTap: () {
         setState(() {
-          _isPaintModeActive = !_isPaintModeActive;
+          _selectedCategory = categoryId;
+          // Clear selection when switching categories
+          _selectedItemId = null;
         });
       },
       child: Container(
-        width: 50,
-        height: 50,
+        margin: const EdgeInsets.only(right: 8, top: 6, bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFF4D8D),
-          borderRadius: const BorderRadius.only(topRight: Radius.circular(12)),
-          border: Border.all(
-            color: _isPaintModeActive ? Colors.white : Colors.black,
-            width: _isPaintModeActive ? 3 : 2,
-          ),
-          boxShadow: _isPaintModeActive
+          color: isSelected ? const Color(0xFFFF4D8D) : Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: const Color(0xFFFF4D8D).withValues(alpha: 0.5),
+                    color: const Color(0xFFFF4D8D).withValues(alpha: 0.3),
                     blurRadius: 8,
-                    spreadRadius: 2,
+                    offset: const Offset(0, 2),
                   ),
                 ]
               : null,
         ),
-        child: Center(
-          child: Text(
-            '🎨',
-            style: TextStyle(fontSize: _isPaintModeActive ? 26 : 24),
+        child: Text(
+          emoji,
+          style: TextStyle(
+            fontSize: isSelected ? 22 : 21,
           ),
         ),
       ),
@@ -945,16 +931,22 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
     final userId = authProvider.user?.uid;
     final houseId = houseProvider.currentHouseId;
 
+    // Filter items by selected category
+    final filteredItems = _allFurnitureItems
+        .where((item) => item.category == _selectedCategory)
+        .toList();
+
     // If user is not logged in or no house, show all items as unlocked
     if (userId == null || houseId == null) {
       return ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        itemCount: _allFurnitureItems.length,
+        itemCount: filteredItems.length,
         itemBuilder: (context, index) {
-          final item = _allFurnitureItems[index];
+          final item = filteredItems[index];
           final isSelected = _selectedItemId == item.id;
-          final isFree = index < 7; // First 7 items are free
+          final originalIndex = _allFurnitureItems.indexOf(item);
+          final isFree = originalIndex < 7; // First 7 items are free
 
           return _buildFurnitureItem(item, isSelected, isFree, false, [], 0);
         },
@@ -991,14 +983,20 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
           currentCoins = (userMember?['coins'] ?? 0) as int;
         }
 
+        // Filter items by selected category
+        final filteredItems = _allFurnitureItems
+            .where((item) => item.category == _selectedCategory)
+            .toList();
+
         return ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          itemCount: _allFurnitureItems.length,
+          itemCount: filteredItems.length,
           itemBuilder: (context, index) {
-            final item = _allFurnitureItems[index];
+            final item = filteredItems[index];
             final isSelected = _selectedItemId == item.id;
-            final isFree = index < 7; // First 7 items are free
+            final originalIndex = _allFurnitureItems.indexOf(item);
+            final isFree = originalIndex < 7; // First 7 items are free
             final itemId = 'furniture_${item.id}';
             final isOwned = purchasedItems.contains(itemId);
 
@@ -1615,32 +1613,26 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Category Icon Buttons on top left (horizontal, stuck together)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        Opacity(
-                          opacity: 0.5,
-                          child: _buildCategoryIconButton(
-                            '🛋️',
-                            const Color(0xFFFFC400),
-                            isLeft: true,
-                          ),
-                        ),
-                        Opacity(
-                          opacity: 0.5,
-                          child: _buildCategoryIconButton(
-                            '🌿',
-                            const Color(0xFF00D9A3),
-                            isLeft: false,
-                            isMiddle: true,
-                          ),
-                        ),
-                        _buildPaintIconButton(),
-                      ],
+                    // Category Tab Bar - Neo-brutalist style
+                    Container(
+                      height: 65,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                      ),
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        children: [
+                          _buildCategoryTab('🛋️', 'Furniture', 'furniture'),
+                          _buildCategoryTab('🖼️', 'Paintings', 'paintings'),
+                          _buildCategoryTab('🪴', 'Decor', 'decor'),
+                          _buildCategoryTab('🔊', 'Electronics', 'electronics'),
+                          _buildCategoryTab('🎨', 'Paint', 'paint'),
+                        ],
+                      ),
                     ),
 
-                    // Furniture Items Slider or Color Picker (based on mode)
+                    // Furniture Items Slider or Color Picker (based on category)
                     Container(
                       height: 160,
                       margin: const EdgeInsets.only(right: 0),
@@ -1660,7 +1652,7 @@ class _EditHouseWebViewScreenState extends State<EditHouseWebViewScreen> {
                           top: BorderSide(color: Colors.black, width: 2),
                         ),
                       ),
-                      child: _isPaintModeActive
+                      child: _selectedCategory == 'paint'
                           ? _buildColorPicker()
                           : _buildFurnitureList(),
                     ),

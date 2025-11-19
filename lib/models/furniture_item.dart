@@ -6,6 +6,7 @@ class FurnitureItem {
   final String emoji; // fallback if no image
   final double width;
   final double height;
+  final String category; // Category: 'furniture', 'decor', 'paintings', 'electronics'
 
   FurnitureItem({
     required this.id,
@@ -15,6 +16,7 @@ class FurnitureItem {
     required this.emoji,
     this.width = 80,
     this.height = 60,
+    required this.category,
   });
 }
 
